@@ -25,7 +25,7 @@ def main():
     install_requirements()
     
     # Run Streamlit dashboard
-    dashboard_path = os.path.join(os.getcwd(), 'streamlit_dashboard.py')
+    dashboard_path = os.path.join(os.getcwd(), 'streamlit_dashboard_fixed.py')
     
     print("Launching futuristic dashboard...")
     print("Dashboard will open in your browser")
@@ -33,7 +33,7 @@ def main():
     
     subprocess.run([
         sys.executable, '-m', 'streamlit', 'run', dashboard_path,
-        '--server.port', '8502',
+        '--server.port', '8503',
         '--server.headless', 'false'
     ])
 
