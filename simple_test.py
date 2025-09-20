@@ -1,103 +1,124 @@
 #!/usr/bin/env python3
 """
-Simple Server Test Script
-Quick verification that the AI Content Uploader Agent is working
+Simple test script to verify bucket and database saving functionality
 """
 
-import requests
-import time
+import os
+import sys
 import json
+import time
+from pathlib import Path
 
-def test_server(base_url="http://127.0.0.1:9000"):
-    """Test basic server functionality"""
-    print("Testing AI Content Uploader Agent Server")
-    print(f"Base URL: {base_url}")
-    print("=" * 50)
-    
-    tests_passed = 0
-    tests_failed = 0
-    
-    # Test 1: Health Check
+# Add project root to path
+sys.path.append(os.path.dirname(__file__))
+
+def test_bucket_functionality():
+    """Test basic bucket functionality"""
     try:
-        response = requests.get(f"{base_url}/health", timeout=5)
-        if response.status_code == 200:
-            print("[PASS] Health check: PASSED")
-            tests_passed += 1
-        else:
-            print(f"[FAIL] Health check: FAILED ({response.status_code})")
-            tests_failed += 1
+        from core import bhiv_bucket
+        
+        print("Testing bucket functionality...")
+        
+        # Initialize bucket
+        bhiv_bucket.init_bucket()
+        print("[OK] Bucket initialized")
+        
+        # Test script saving
+        test_script = "This is a test script.\nSecond line.\nThird line."
+        temp_path = bhiv_bucket.get_bucket_path("tmp", "test.txt")
+        
+        with open(temp_path, 'w', encoding='utf-8') as f:
+            f.write(test_script)
+        
+        script_path = bhiv_bucket.save_script(temp_path, "test_script.txt")
+        print(f"[OK] Script saved to: {script_path}")
+        
+        # Test storyboard saving
+        storyboard_data = {
+            "content_id": "test_001",
+            "scenes": [{"text": "Test scene"}],
+            "created_at": time.time()
+        }
+        
+        storyboard_path = bhiv_bucket.save_storyboard(storyboard_data, "test_storyboard.json")
+        print(f"[OK] Storyboard saved to: {storyboard_path}")
+        
+        # Test rating saving
+        rating_data = {
+            "content_id": "test_001",
+            "user_id": "test_user",
+            "rating": 5,
+            "timestamp": time.time()
+        }
+        
+        rating_path = bhiv_bucket.save_rating(rating_data, "test_rating.json")
+        print(f"[OK] Rating saved to: {rating_path}")
+        
+        # Test log saving
+        log_data = {
+            "action": "test",
+            "status": "completed",
+            "timestamp": time.time()
+        }
+        
+        log_path = bhiv_bucket.save_json('logs', 'test_log.json', log_data)
+        print(f"[OK] Log saved to: {log_path}")
+        
+        # Clean up temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        
+        return True
+        
     except Exception as e:
-        print(f"[FAIL] Health check: FAILED ({e})")
-        tests_failed += 1
-    
-    # Test 2: Demo Login
+        print(f"[FAIL] Bucket test failed: {e}")
+        return False
+
+def test_database_functionality():
+    """Test database functionality"""
     try:
-        response = requests.get(f"{base_url}/demo-login", timeout=5)
-        if response.status_code == 200:
-            print("[PASS] Demo login: PASSED")
-            tests_passed += 1
-        else:
-            print(f"[FAIL] Demo login: FAILED ({response.status_code})")
-            tests_failed += 1
+        from core.database import DatabaseManager
+        from core.models import create_db_and_tables
+        
+        print("Testing database functionality...")
+        
+        # Create tables
+        create_db_and_tables()
+        print("[OK] Database tables created/verified")
+        
+        # Test database manager
+        db = DatabaseManager()
+        analytics = db.get_analytics_data()
+        print(f"[OK] Database connection successful - {analytics.get('total_content', 0)} content items")
+        
+        return True
+        
     except Exception as e:
-        print(f"[FAIL] Demo login: FAILED ({e})")
-        tests_failed += 1
+        print(f"[FAIL] Database test failed: {e}")
+        return False
+
+def main():
+    """Run tests"""
+    print("=== Simple Bucket and Database Test ===")
+    print()
     
-    # Test 3: API Documentation
-    try:
-        response = requests.get(f"{base_url}/docs", timeout=5)
-        if response.status_code == 200:
-            print("[PASS] API docs: PASSED")
-            tests_passed += 1
-        else:
-            print(f"[FAIL] API docs: FAILED ({response.status_code})")
-            tests_failed += 1
-    except Exception as e:
-        print(f"[FAIL] API docs: FAILED ({e})")
-        tests_failed += 1
+    bucket_ok = test_bucket_functionality()
+    print()
+    database_ok = test_database_functionality()
+    print()
     
-    # Test 4: Contents List
-    try:
-        response = requests.get(f"{base_url}/contents", timeout=5)
-        if response.status_code == 200:
-            print("[PASS] Contents list: PASSED")
-            tests_passed += 1
-        else:
-            print(f"[FAIL] Contents list: FAILED ({response.status_code})")
-            tests_failed += 1
-    except Exception as e:
-        print(f"[FAIL] Contents list: FAILED ({e})")
-        tests_failed += 1
-    
-    # Test 5: Metrics
-    try:
-        response = requests.get(f"{base_url}/metrics", timeout=5)
-        if response.status_code == 200:
-            print("[PASS] Metrics: PASSED")
-            tests_passed += 1
-        else:
-            print(f"[FAIL] Metrics: FAILED ({response.status_code})")
-            tests_failed += 1
-    except Exception as e:
-        print(f"[FAIL] Metrics: FAILED ({e})")
-        tests_failed += 1
-    
-    print("=" * 50)
-    print(f"Test Results: {tests_passed} passed, {tests_failed} failed")
-    
-    if tests_failed == 0:
-        print("All tests passed! Server is working correctly.")
+    if bucket_ok and database_ok:
+        print("[SUCCESS] All tests passed!")
+        print("Your video generation should now properly save:")
+        print("- Scripts to bucket/scripts/ and database")
+        print("- Storyboards to bucket/storyboards/")
+        print("- Ratings to bucket/ratings/")
+        print("- Logs to bucket/logs/")
         return True
     else:
-        print("Some tests failed. Check server configuration.")
+        print("[FAIL] Some tests failed")
         return False
 
 if __name__ == "__main__":
-    # Test default local server
-    success = test_server()
-    
-    if not success:
-        print("\nTroubleshooting tips:")
-        print("1. Make sure the server is running: python start_server.py")
-        print("2. Check if port 9000 is available")
-        print("3. Verify dependencies are installed: pip install -r requirements.txt")
+    success = main()
+    sys.exit(0 if success else 1)

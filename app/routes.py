@@ -511,6 +511,18 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         # Save all uploaded files to uploads folder
         bucket_path = bhiv_bucket.save_upload(temp_path, fname)
         
+        # If it's a script file, also save to scripts bucket
+        script_path = None
+        if ext == '.txt':
+            try:
+                script_filename = f"{content_id}_script.txt"
+                script_path = bhiv_bucket.save_script(temp_path, script_filename)
+                import logging
+                logging.info(f"Script file also saved to scripts bucket: {script_path}")
+            except Exception as script_error:
+                import logging
+                logging.warning(f"Failed to save script to scripts bucket: {script_error}")
+        
         # Clean up temp file
         try:
             os.remove(temp_path)
@@ -540,6 +552,51 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
                 'uploaded_at': uploaded_at
             }
             db.create_content(content_data)
+            
+            # If it's a script file, also save to scripts table
+            if ext == '.txt' and script_path:
+                try:
+                    script_content = data.decode('utf-8')
+                    script_data = {
+                        'script_id': f"upload_{content_id}",
+                        'content_id': content_id,
+                        'user_id': uploader_id,
+                        'title': f"Uploaded script: {title}",
+                        'script_content': script_content,
+                        'script_type': 'uploaded_text',
+                        'file_path': script_path,
+                        'used_for_generation': False
+                    }
+                    db.create_script(script_data)
+                    import logging
+                    logging.info(f"Script data saved to database: upload_{content_id}")
+                except Exception as script_db_error:
+                    import logging
+                    logging.warning(f"Failed to save script to database: {script_db_error}")
+            
+            # Save upload log
+            log_data = {
+                'content_id': content_id,
+                'user_id': uploader_id,
+                'action': 'file_upload',
+                'filename': safe_filename,
+                'file_size': len(data),
+                'content_type': file.content_type,
+                'tags': tags,
+                'authenticity_score': authenticity,
+                'bucket_path': bucket_path,
+                'script_path': script_path,
+                'timestamp': uploaded_at
+            }
+            log_filename = f"upload_{content_id}_{int(uploaded_at)}.json"
+            try:
+                bhiv_bucket.save_json('logs', log_filename, log_data)
+                import logging
+                logging.info(f"Upload log saved: {log_filename}")
+            except Exception as log_error:
+                import logging
+                logging.warning(f"Failed to save upload log: {log_error}")
+                
         except Exception as db_error:
             import logging
             logging.error(f"Database save failed: {db_error}")
@@ -585,20 +642,65 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         if not script_content.strip():
             raise HTTPException(status_code=400, detail="Empty script content")
         
+        # Generate IDs
+        script_id = f"script_{uuid.uuid4().hex[:12]}"
+        content_id = uuid.uuid4().hex[:12]
+        timestamp = time.time()
+        uploader_id = current_user.user_id if current_user else 'system'
+        
         # Create temporary script file
-        temp_script_path = bhiv_bucket.get_bucket_path("tmp", f"temp_script_{uuid.uuid4().hex[:8]}.txt")
+        temp_script_path = bhiv_bucket.get_bucket_path("tmp", f"temp_script_{script_id}.txt")
         with open(temp_script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
         
-        # Generate script ID for database
-        script_id = f"script_{uuid.uuid4().hex[:12]}"
+        # Save script to bucket/scripts/
+        script_filename = f"{script_id}.txt"
+        try:
+            script_bucket_path = bhiv_bucket.save_script(temp_script_path, script_filename)
+            import logging
+            logging.info(f"Script saved to bucket: {script_bucket_path}")
+        except Exception as script_save_error:
+            import logging
+            logging.error(f"Failed to save script to bucket: {script_save_error}")
+            script_bucket_path = temp_script_path
+        
+        # Generate tags from script content
+        generated_tags = suggest_tags(title, script_content[:500])  # Use first 500 chars for tags
+        generated_tags.extend(['generated', 'video', 'script'])
+        
+        # Create storyboard data
+        lines = [line.strip() for line in script_content.split('\n') if line.strip()]
+        storyboard_data = {
+            'content_id': content_id,
+            'script_id': script_id,
+            'title': title,
+            'scenes': [{
+                'scene_id': f'scene_{i}',
+                'duration': 2.0,
+                'frames': [{
+                    'text': line,
+                    'background_color': '#000000',
+                    'text_position': 'center'
+                }]
+            } for i, line in enumerate(lines)],
+            'total_duration': len(lines) * 2.0,
+            'generation_method': 'simple_text',
+            'created_at': timestamp
+        }
+        
+        # Save storyboard to bucket
+        storyboard_filename = f"{content_id}_storyboard.json"
+        try:
+            storyboard_path = bhiv_bucket.save_storyboard(storyboard_data, storyboard_filename)
+            import logging
+            logging.info(f"Storyboard saved to bucket: {storyboard_path}")
+        except Exception as storyboard_error:
+            import logging
+            logging.error(f"Failed to save storyboard: {storyboard_error}")
+            storyboard_path = None
         
         # Use simplified video generation approach
         try:
-            # Generate content ID
-            content_id = uuid.uuid4().hex[:12]
-            timestamp = time.time()
-            
             # Create simple video directly from text
             video_filename = f"{content_id}.mp4"
             
@@ -613,6 +715,83 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
                 logging.error(f"Video generation failed: {video_error}")
                 raise HTTPException(status_code=500, detail=f"Video generation failed: {str(video_error)}")
             
+            # Calculate actual duration based on number of lines
+            line_count = max(1, len(lines))
+            frame_duration = 2.0  # 2 seconds per line
+            total_duration = line_count * frame_duration
+            duration_ms = int(total_duration * 1000)
+            
+            # Verify video file exists before saving to database
+            if not os.path.exists(video_path):
+                raise HTTPException(status_code=500, detail="Video file was not created successfully")
+            
+            # Save to database
+            try:
+                from core.database import DatabaseManager
+                db = DatabaseManager()
+                
+                # Save content to database FIRST (required for foreign key)
+                content_data = {
+                    'content_id': content_id,
+                    'uploader_id': uploader_id,
+                    'title': title,
+                    'description': f'Generated video from script: {script_id}',
+                    'file_path': video_path,
+                    'content_type': 'video/mp4',
+                    'duration_ms': duration_ms,
+                    'authenticity_score': 0.8,  # Generated content gets high authenticity
+                    'current_tags': json.dumps(generated_tags),
+                    'uploaded_at': timestamp
+                }
+                db.create_content(content_data)
+                import logging
+                logging.info(f"Content saved to database: {content_id}")
+                
+                # Save script to database AFTER content (foreign key dependency)
+                script_data = {
+                    'script_id': script_id,
+                    'content_id': content_id,
+                    'user_id': uploader_id,
+                    'title': f"Script for {title}",
+                    'script_content': script_content,
+                    'script_type': 'text',
+                    'file_path': script_bucket_path,
+                    'used_for_generation': True
+                }
+                script_created = db.create_script(script_data)
+                if script_created:
+                    import logging
+                    logging.info(f"Script saved to database: {script_id}")
+                else:
+                    import logging
+                    logging.warning("Script table not available, skipping script database save")
+                
+                # Save generation log
+                log_data = {
+                    'content_id': content_id,
+                    'script_id': script_id,
+                    'user_id': uploader_id,
+                    'action': 'video_generation',
+                    'status': 'completed',
+                    'duration_ms': duration_ms,
+                    'tags': generated_tags,
+                    'storyboard_path': storyboard_path,
+                    'timestamp': timestamp
+                }
+                log_filename = f"generation_{content_id}_{int(timestamp)}.json"
+                try:
+                    bhiv_bucket.save_json('logs', log_filename, log_data)
+                    import logging
+                    logging.info(f"Generation log saved: {log_filename}")
+                except Exception as log_error:
+                    import logging
+                    logging.warning(f"Failed to save generation log: {log_error}")
+                        
+            except Exception as db_error:
+                import logging
+                logging.error(f"Database save failed: {db_error}")
+                raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
+            
             # Clean up temp file
             try:
                 if os.path.exists(temp_script_path):
@@ -623,75 +802,12 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             
             # Simple stats for generated content
             storyboard_stats = {
-                'total_duration': 10.0,
-                'total_scenes': 1,
+                'total_duration': total_duration,
+                'total_scenes': len(lines),
                 'version': '1.0',
-                'generation_method': 'simple_text'
+                'generation_method': 'simple_text',
+                'storyboard_path': storyboard_path
             }
-            
-            # Calculate actual duration based on number of lines
-            lines = [line.strip() for line in script_content.split('\n') if line.strip()]
-            line_count = max(1, len(lines))
-            frame_duration = 2.0  # 2 seconds per line
-            total_duration = line_count * frame_duration
-            duration_ms = int(total_duration * 1000)
-            
-            uploader_id = current_user.user_id if current_user else 'system'
-            
-            # Verify video file exists before saving to database
-            if not os.path.exists(video_path):
-                raise HTTPException(status_code=500, detail="Video file was not created successfully")
-            
-            # Save script to database first
-            try:
-                from core.database import DatabaseManager
-                db = DatabaseManager()
-                
-                # Save script to database (if table exists)
-                script_data = {
-                    'script_id': script_id,
-                    'user_id': uploader_id,
-                    'title': f"Script for {title}",
-                    'script_content': script_content,
-                    'script_type': 'text',
-                    'file_path': temp_script_path,
-                    'used_for_generation': True
-                }
-                script_created = db.create_script(script_data)
-                if not script_created:
-                    import logging
-                    logging.warning("Script table not available, skipping script save")
-                
-                # Save content to database
-                content_data = {
-                    'content_id': content_id,
-                    'uploader_id': uploader_id,
-                    'title': title,
-                    'description': 'Generated video',
-                    'file_path': video_path,
-                    'content_type': 'video/mp4',
-                    'duration_ms': duration_ms,
-                    'authenticity_score': 0.0,
-                    'current_tags': json.dumps(['generated', 'video']),
-                    'uploaded_at': timestamp
-                }
-                db.create_content(content_data)
-                
-                # Update script with content_id (if script was created)
-                try:
-                    with Session(db.engine) as session:
-                        script = session.get(Script, script_id)
-                        if script:
-                            script.content_id = content_id
-                            session.commit()
-                except Exception as e:
-                    import logging
-                    logging.warning(f"Script update failed: {e}")
-                        
-            except Exception as db_error:
-                import logging
-                logging.error(f"Database save failed: {db_error}")
-                raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
             
             return {
                 'content_id': content_id,
@@ -700,6 +816,9 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
                 'stream_url': f'/stream/{content_id}',
                 'metadata_url': f'/content/{content_id}/metadata',
                 'local_file_path': video_path,
+                'script_bucket_path': script_bucket_path,
+                'storyboard_path': storyboard_path,
+                'generated_tags': generated_tags,
                 'storyboard_stats': storyboard_stats,
                 'processing_status': 'completed',
                 'next_step': f'Use /content/{content_id}/metadata to view full details or /stream/{content_id} to watch video'
@@ -980,6 +1099,7 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
         
         # Get user_id from authenticated user (secure)
         user_id = current_user.user_id
+        timestamp = time.time()
         
         # Convert rating to reward for RL agent
         reward = (f.rating - 3) / 2.0  # Maps 1-5 rating to -1.0 to 1.0 reward
@@ -997,9 +1117,30 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
                 'rating': f.rating,
                 'comment': f.comment,
                 'reward': reward,
-                'timestamp': time.time()
+                'timestamp': timestamp
             }
             db.create_feedback(feedback_data)
+            
+            # Save rating to bucket/ratings/
+            rating_data = {
+                'content_id': f.content_id,
+                'user_id': user_id,
+                'rating': f.rating,
+                'comment': f.comment,
+                'event_type': event_type,
+                'reward': reward,
+                'timestamp': timestamp,
+                'created_at': time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+            rating_filename = f"rating_{f.content_id}_{user_id}_{int(timestamp)}.json"
+            try:
+                bhiv_bucket.save_rating(rating_data, rating_filename)
+                import logging
+                logging.info(f"Rating saved to bucket: {rating_filename}")
+            except Exception as rating_error:
+                import logging
+                logging.warning(f"Failed to save rating to bucket: {rating_error}")
+                
         except Exception as db_error:
             import logging
             logging.error(f"Feedback save failed: {db_error}")
@@ -1016,6 +1157,25 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
             
             # Get updated agent metrics after training
             agent_metrics = agent.metrics()
+            
+            # Save RL training log
+            rl_log_data = {
+                'content_id': f.content_id,
+                'user_id': user_id,
+                'action': 'rl_training',
+                'event_type': event_type,
+                'reward': reward,
+                'agent_metrics': agent_metrics,
+                'timestamp': timestamp
+            }
+            rl_log_filename = f"rl_training_{f.content_id}_{int(timestamp)}.json"
+            try:
+                bhiv_bucket.save_json('logs', rl_log_filename, rl_log_data)
+                import logging
+                logging.info(f"RL training log saved: {rl_log_filename}")
+            except Exception as log_error:
+                import logging
+                logging.warning(f"Failed to save RL training log: {log_error}")
             
             return FeedbackResponse(
                 status='success',

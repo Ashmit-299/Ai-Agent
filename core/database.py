@@ -1,4 +1,9 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv()
+
 # Fix psycopg2 import issue
 try:
     import psycopg2
@@ -17,8 +22,9 @@ import json
 import time
 from datetime import datetime
 
-# Use SQLite for local development, PostgreSQL for production
+# Use Supabase PostgreSQL for production, SQLite for fallback
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_agent.db")
+print(f"Using database: {'PostgreSQL (Supabase)' if 'postgresql' in DATABASE_URL else 'SQLite'}")
 
 # Engine configuration
 if DATABASE_URL.startswith("sqlite"):
