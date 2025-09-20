@@ -11,22 +11,32 @@ try:
 except ImportError:
     bhiv_bucket = None
 
-# Configure ImageMagick path for MoviePy
+# Configure paths for video generation
 try:
-    import moviepy.config as config
-    # Set the correct ImageMagick path
+    import moviepy.config as config  # type: ignore
+    # Set the correct ImageMagick path for Windows
     imagemagick_path = r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe"
     if os.path.exists(imagemagick_path):
         config.IMAGEMAGICK_BINARY = imagemagick_path
-except:
+except ImportError:
     pass
+
+# Check for FFmpeg availability
+def check_ffmpeg():
+    """Check if FFmpeg is available"""
+    try:
+        import subprocess
+        subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
 
 def render_video_from_storyboard(storyboard: Dict, output_path: str, width: int = 1920, height: int = 1080) -> str:
     """Render video from storyboard JSON using moviepy"""
     try:
         # Import moviepy with error handling
         try:
-            from moviepy.editor import TextClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoFileClip, AudioFileClip
+            from moviepy.editor import TextClip, CompositeVideoClip, concatenate_videoclips, ColorClip, VideoFileClip, AudioFileClip  # type: ignore
         except ImportError:
             raise ImportError("moviepy is required for video generation. Install with: pip install moviepy")
         
@@ -154,80 +164,131 @@ def render_video_from_storyboard(storyboard: Dict, output_path: str, width: int 
         raise ValueError(f"Video generation failed: {e}")
 
 def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> str:
-    """Create a simple video with each line as a separate frame"""
+    """Create a simple video with each line as a separate frame using FFmpeg"""
+    import subprocess
+    import tempfile
+    
+    # Ensure output directory exists
+    output_dir = os.path.dirname(output_path)
+    if output_dir:
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # Split text into lines
+    text = str(text)[:1000] if text else "No content"
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    if not lines:
+        lines = [text]
+    
+    # Each frame lasts 3 seconds
+    frame_duration = 3
+    
     try:
-        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
-        
-        # Validate and sanitize inputs
-        text = str(text)[:1000] if text else "No content"
-        
-        # Split text into lines
-        lines = [line.strip() for line in text.split('\n') if line.strip()]
-        if not lines:
-            lines = [text]
-        
-        # Calculate duration per frame (2 seconds per line)
-        frame_duration = 2.0
-        
-        # Use bucket storage for video output if available
-        if bhiv_bucket:
-            temp_output = bhiv_bucket.get_bucket_path("tmp", f"temp_{Path(output_path).name}")
-        else:
-            temp_output = f"tmp_temp_{Path(output_path).name}"
-        
-        clips = []
-        
-        # Create a clip for each line
-        for line in lines:
-            # Create background
-            bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
+        # Try FFmpeg approach first
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video_parts = []
             
-            # Create text clip with automatic line wrapping
-            txt_clip = TextClip(
-                line,
-                fontsize=80,
-                color='white',
-                font='Arial-Bold',
-                align='center',
-                size=(1720, None),
-                method='caption'
-            ).set_duration(frame_duration).set_position('center')
+            for i, line in enumerate(lines):
+                # Create a simple black video with text overlay using FFmpeg
+                part_video = os.path.join(temp_dir, f"part_{i}.mp4")
+                
+                # Escape text for FFmpeg
+                safe_text = line.replace("'", "\\'").replace('"', '\\"').replace(':', '\\:')[:50]
+                
+                try:
+                    # Create video part with text overlay
+                    cmd = [
+                        'ffmpeg', '-y',
+                        '-f', 'lavfi',
+                        '-i', f'color=black:size=1280x720:duration={frame_duration}',
+                        '-vf', f"drawtext=text='{safe_text}':fontcolor=white:fontsize=40:x=(w-text_w)/2:y=(h-text_h)/2",
+                        '-c:v', 'libx264',
+                        '-pix_fmt', 'yuv420p',
+                        part_video
+                    ]
+                    
+                    subprocess.run(cmd, check=True, capture_output=True)
+                    video_parts.append(part_video)
+                    
+                except subprocess.CalledProcessError:
+                    # If text overlay fails, create simple black video
+                    cmd = [
+                        'ffmpeg', '-y',
+                        '-f', 'lavfi',
+                        '-i', f'color=black:size=1280x720:duration={frame_duration}',
+                        '-c:v', 'libx264',
+                        '-pix_fmt', 'yuv420p',
+                        part_video
+                    ]
+                    subprocess.run(cmd, check=True, capture_output=True)
+                    video_parts.append(part_video)
             
-            # Composite frame
-            frame_clip = CompositeVideoClip([bg_clip, txt_clip])
-            clips.append(frame_clip)
-        
-        # Concatenate all frames
-        final_clip = concatenate_videoclips(clips)
-        
-        # Export video
-        final_clip.write_videofile(
-            temp_output,
-            fps=24,
-            codec="libx264",
-            audio_codec="aac",
-            verbose=False,
-            logger=None
-        )
-        
-        final_clip.close()
-        for clip in clips:
-            clip.close()
-        
-        # Move to final location
-        if bhiv_bucket:
-            final_path = bhiv_bucket.save_video(temp_output, Path(output_path).name)
-            try:
-                os.remove(temp_output)
-            except (OSError, FileNotFoundError) as e:
-                import logging
-                logging.warning(f"Failed to clean up temp file {temp_output}: {e}")
-            return final_path
-        else:
-            return str(output_path)
-        
-    except Exception as e:
-        raise ValueError(f"Simple video creation failed: {e}")
+            if video_parts:
+                # Create concat file
+                concat_file = os.path.join(temp_dir, 'concat.txt')
+                with open(concat_file, 'w') as f:
+                    for part in video_parts:
+                        f.write(f"file '{part}'\n")
+                
+                # Concatenate all parts
+                cmd = [
+                    'ffmpeg', '-y',
+                    '-f', 'concat',
+                    '-safe', '0',
+                    '-i', concat_file,
+                    '-c', 'copy',
+                    output_path
+                ]
+                
+                subprocess.run(cmd, check=True, capture_output=True)
+                return str(output_path)
+            
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        # FFmpeg not available or failed, try MoviePy
+        try:
+            from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips  # type: ignore
+            
+            clips = []
+            for line in lines:
+                try:
+                    bg_clip = ColorClip(size=(1280, 720), color=(0, 0, 0), duration=3.0)
+                    txt_clip = TextClip(
+                        line,
+                        fontsize=50,
+                        color='white',
+                        align='center',
+                        size=(1200, 600)
+                    ).set_duration(3.0).set_position('center')
+                    
+                    frame_clip = CompositeVideoClip([bg_clip, txt_clip])
+                    clips.append(frame_clip)
+                except Exception:
+                    bg_clip = ColorClip(size=(1280, 720), color=(0, 0, 0), duration=3.0)
+                    clips.append(bg_clip)
+            
+            if clips:
+                final_clip = concatenate_videoclips(clips)
+                final_clip.write_videofile(
+                    output_path,
+                    fps=24,
+                    codec="libx264",
+                    audio=False,
+                    verbose=False,
+                    logger=None
+                )
+                final_clip.close()
+                for clip in clips:
+                    clip.close()
+                return str(output_path)
+                
+        except ImportError:
+            pass
+    
+    # Last resort - create placeholder
+    text_path = str(Path(output_path).with_suffix('.txt'))
+    with open(text_path, 'w', encoding='utf-8') as f:
+        f.write(f"Video Content:\n{text}\n\n")
+        f.write("Note: Video generation unavailable - FFmpeg and MoviePy not available")
+    return text_path
 
 def get_video_info(video_path: str) -> Dict:
     """Get basic information about generated video"""
@@ -241,6 +302,7 @@ def get_video_info(video_path: str) -> Dict:
         
         # Try to get video duration using moviepy
         try:
+            from moviepy.editor import VideoFileClip
             with VideoFileClip(str(video_file)) as clip:
                 duration = clip.duration
                 fps = clip.fps
