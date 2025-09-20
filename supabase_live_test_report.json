@@ -1,0 +1,69 @@
+{
+  "timestamp": "2025-09-20T12:05:47.717874",
+  "database_url": "postgresql://postgres.dusqpdhojbgfxwflukhc:Moto%40...",
+  "total_tests": 7,
+  "passed_tests": 6,
+  "success_rate": 85.71428571428571,
+  "test_results": [
+    {
+      "test_name": "Database Connection",
+      "success": true,
+      "details": "Connection established successfully",
+      "timestamp": "2025-09-20T12:05:43.011718"
+    },
+    {
+      "test_name": "User Creation",
+      "success": true,
+      "details": "Created user: livetest_dfb840",
+      "timestamp": "2025-09-20T12:05:43.697961"
+    },
+    {
+      "test_name": "User Retrieval",
+      "success": true,
+      "details": "Retrieved user: livetest_dfb840",
+      "timestamp": "2025-09-20T12:05:43.811107"
+    },
+    {
+      "test_name": "Content Creation",
+      "success": true,
+      "details": "Created content: Live Test Content",
+      "timestamp": "2025-09-20T12:05:44.208108"
+    },
+    {
+      "test_name": "Content Retrieval",
+      "success": true,
+      "details": "Retrieved content: Live Test Content",
+      "timestamp": "2025-09-20T12:05:44.402576"
+    },
+    {
+      "test_name": "Feedback Operations",
+      "success": false,
+      "details": "Feedback operations failed: (psycopg2.errors.ForeignKeyViolation) insert or update on table \"feedback\" violates foreign key constraint \"feedback_content_id_fkey\"\nDETAIL:  Key (content_id)=(live_test_624a2d6d) is not present in table \"content\".\n\n[SQL: INSERT INTO feedback (content_id, user_id, event_type, watch_time_ms, reward, rating, comment, sentiment, engagement_score, timestamp) VALUES (%(content_id)s, %(user_id)s, %(event_type)s, %(watch_time_ms)s, %(reward)s, %(rating)s, %(comment)s, %(sentiment)s, %(engagement_score)s, %(timestamp)s) RETURNING feedback.id]\n[parameters: {'content_id': 'live_test_624a2d6d', 'user_id': 'test_live_dfbb779e', 'event_type': 'like', 'watch_time_ms': 0, 'reward': 0.5, 'rating': 4, 'comment': 'Great live test content!', 'sentiment': None, 'engagement_score': None, 'timestamp': 1758350144.4025767}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+      "timestamp": "2025-09-20T12:05:44.542230"
+    },
+    {
+      "test_name": "Analytics Data",
+      "success": true,
+      "details": "Retrieved analytics: 9 users, 6 content items",
+      "timestamp": "2025-09-20T12:05:44.844996"
+    },
+    {
+      "test_name": "Database Performance",
+      "success": true,
+      "details": "5 queries completed in 1.74 seconds",
+      "timestamp": "2025-09-20T12:05:46.585985"
+    },
+    {
+      "test_name": "Concurrent Operations",
+      "success": true,
+      "details": "3 concurrent queries successful, results: [9, 9, 9]",
+      "timestamp": "2025-09-20T12:05:47.314206"
+    },
+    {
+      "test_name": "Cleanup",
+      "success": false,
+      "details": "Cleanup failed: (psycopg2.errors.ForeignKeyViolation) update or delete on table \"user\" violates foreign key constraint \"content_uploader_id_fkey\" on table \"content\"\nDETAIL:  Key (user_id)=(test_live_dfbb779e) is still referenced from table \"content\".\n\n[SQL: DELETE FROM \"user\" WHERE \"user\".user_id = %(user_id_1)s]\n[parameters: {'user_id_1': 'test_live_dfbb779e'}]\n(Background on this error at: https://sqlalche.me/e/20/gkpj)",
+      "timestamp": "2025-09-20T12:05:47.717874"
+    }
+  ]
+}
