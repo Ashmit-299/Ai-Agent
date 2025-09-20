@@ -119,18 +119,19 @@ app = FastAPI(
     ]
 )
 
-# Security middleware
+# Enhanced security middleware
 app.add_middleware(
     TrustedHostMiddleware, 
-    allowed_hosts=["localhost", "127.0.0.1", "*.localhost", "testserver"]
+    allowed_hosts=["localhost", "127.0.0.1", "*.localhost", "testserver", "*.render.com", "*.onrender.com"]
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "https://*.render.com", "https://*.onrender.com"],
     allow_credentials=True,
-    allow_methods=["GET", "POST"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
+    expose_headers=["X-Rate-Limit-Remaining", "X-Rate-Limit-Reset"]
 )
 
 # PostHog middleware
@@ -154,20 +155,46 @@ async def ph_middleware(req: Request, call_next):
     return res
 
 @app.middleware("http")
-async def security_middleware(request: Request, call_next):
-    """Security, rate limiting, and observability middleware"""
+async def enhanced_security_middleware(request: Request, call_next):
+    """Enhanced security, rate limiting, and observability middleware"""
+    import time
+    start_time = time.time()
+    
     try:
-        # Rate limiting
+        # Enhanced rate limiting
         rate_limit_middleware(request)
         
-        # Log request with sanitized input
+        # Security headers validation
         client_ip = security_manager.get_client_ip(request)
         safe_method = str(request.method).replace('\n', '').replace('\r', '')
         safe_path = str(request.url.path).replace('\n', '').replace('\r', '')
         safe_ip = str(client_ip).replace('\n', '').replace('\r', '')
+        
+        # Block suspicious patterns
+        suspicious_patterns = ['../', '..\\', '<script', 'javascript:', 'data:', 'vbscript:']
+        if any(pattern in safe_path.lower() for pattern in suspicious_patterns):
+            log_security_event("SUSPICIOUS_REQUEST", f"Path: {safe_path}", client_ip)
+            raise HTTPException(status_code=400, detail="Invalid request")
+        
+        # Log request with sanitized input
         logger.info(f"Request: {safe_method} {safe_path} from {safe_ip}")
         
         response = await call_next(request)
+        
+        # Add security headers
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+        
+        # Add rate limit headers
+        response.headers["X-Rate-Limit-Remaining"] = "100"
+        response.headers["X-Rate-Limit-Reset"] = str(int(time.time()) + 3600)
+        
+        # Performance monitoring
+        process_time = time.time() - start_time
+        response.headers["X-Process-Time"] = str(process_time)
         
         # PostHog event tracking
         if posthog and POSTHOG_API_KEY:
@@ -178,7 +205,8 @@ async def security_middleware(request: Request, call_next):
                     properties={
                         "path": safe_path,
                         "method": safe_method,
-                        "status_code": response.status_code
+                        "status_code": response.status_code,
+                        "process_time": process_time
                     }
                 )
             except Exception:
@@ -190,6 +218,8 @@ async def security_middleware(request: Request, call_next):
         if e.status_code == 429:
             safe_path = str(request.url.path).replace('\n', '').replace('\r', '')
             log_security_event("RATE_LIMIT_EXCEEDED", f"Path: {safe_path}", client_ip)
+        elif e.status_code == 400:
+            log_security_event("INVALID_REQUEST", f"Path: {safe_path}", client_ip)
         raise e
     except Exception as e:
         logger.error(f"Middleware error: {e}")

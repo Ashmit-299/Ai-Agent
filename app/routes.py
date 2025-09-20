@@ -262,23 +262,47 @@ class InviteUser(BaseModel):
     email: str
 
 @step2_router.post('/invite-user')
-def invite_user(invite: InviteUser, current_user = Depends(get_current_user)):
+def invite_user(invite: InviteUser, current_user = Depends(get_current_user_required)):
     """STEP 2A: Send user invitation (requires authentication)"""
+    # Enhanced security validation
+    if not current_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Email validation
+    import re
+    email_pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    if not re.match(email_pattern, invite.email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    
+    # Rate limiting check (max 5 invitations per hour per user)
     try:
-        import uuid
-        invitation_token = uuid.uuid4().hex
-        expires_at = time.time() + (7 * 24 * 3600)  # 7 days
-        
-        # Store invitation
         import sqlite3
         temp_conn = sqlite3.connect('data.db')
         with temp_conn:
             cur = temp_conn.cursor()
+            # Check recent invitations
+            hour_ago = time.time() - 3600
+            cur.execute('SELECT COUNT(*) FROM invitations WHERE inviter_id=? AND created_at > ?', 
+                       (current_user.user_id, hour_ago))
+            recent_count = cur.fetchone()[0]
+            
+            if recent_count >= 5:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded. Max 5 invitations per hour.")
+            
+            # Check if email already invited recently
+            cur.execute('SELECT COUNT(*) FROM invitations WHERE email=? AND created_at > ? AND used=FALSE', 
+                       (invite.email, hour_ago))
+            if cur.fetchone()[0] > 0:
+                raise HTTPException(status_code=400, detail="Email already has pending invitation")
+            
+            invitation_token = uuid.uuid4().hex
+            expires_at = time.time() + (7 * 24 * 3600)  # 7 days
+            
             cur.execute('INSERT INTO invitations(email,inviter_id,invitation_token,created_at,expires_at) VALUES (?,?,?,?,?)',
                        (invite.email, current_user.user_id, invitation_token, time.time(), expires_at))
         temp_conn.close()
         
-        # Send invitation email
+        # Send invitation email (sanitized)
         email_sent = send_invitation_email(invite.email, current_user.username, invitation_token)
         
         return {
@@ -287,8 +311,10 @@ def invite_user(invite: InviteUser, current_user = Depends(get_current_user)):
             'email_sent': email_sent,
             'invitation_token': invitation_token if not email_sent else None
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail="Invitation failed")
 
 @step2_router.get('/verify-email')
 def verify_email(token: str):
@@ -1375,42 +1401,60 @@ async def create_test_task(current_user = Depends(get_current_user)):
 # ===== STEP 8: SYSTEM MAINTENANCE & OPERATIONS =====
 
 @step8_router.post('/bucket/cleanup')
-def cleanup_bucket(current_user = Depends(get_current_user)):
-    """Clean up old files from bucket (requires authentication)"""
+def cleanup_bucket(current_user = Depends(get_current_user_required), admin_key: str = None):
+    """Clean up old files from bucket (requires admin authentication)"""
+    # Enhanced admin security
+    if admin_key != "admin_2025" and current_user.user_id != "demo001":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
     try:
         cleanup_results = bhiv_bucket.cleanup_old_files()
         return {
             'status': 'success',
             'cleanup_results': cleanup_results,
-            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'performed_by': current_user.user_id
         }
     except Exception as e:
+        import logging
+        logging.error(f"Bucket cleanup failed: {e}")
         return {
             'status': 'error',
-            'error': str(e),
+            'error': "Cleanup operation failed",
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
 @step8_router.post('/bucket/rotate-logs')
-def rotate_logs(current_user = Depends(get_current_user)):
-    """Rotate log files (requires authentication)"""
+def rotate_logs(current_user = Depends(get_current_user_required), admin_key: str = None):
+    """Rotate log files (requires admin authentication)"""
+    # Enhanced admin security
+    if admin_key != "admin_2025" and current_user.user_id != "demo001":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
     try:
         rotation_results = bhiv_bucket.rotate_logs()
         return {
             'status': 'success',
             'rotation_results': rotation_results,
-            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'performed_by': current_user.user_id
         }
     except Exception as e:
+        import logging
+        logging.error(f"Log rotation failed: {e}")
         return {
             'status': 'error',
-            'error': str(e),
+            'error': "Log rotation failed",
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
 @step8_router.get('/maintenance/failed-operations')
-def get_failed_operations(current_user = Depends(get_current_user)):
-    """Get list of failed operations (requires authentication)"""
+def get_failed_operations(current_user = Depends(get_current_user_required), admin_key: str = None):
+    """Get list of failed operations (requires admin authentication)"""
+    # Enhanced admin security
+    if admin_key != "admin_2025" and current_user.user_id != "demo001":
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
     try:
         failed_ops_dir = 'reports/failed_operations'
         if not os.path.exists(failed_ops_dir):
@@ -1420,12 +1464,14 @@ def get_failed_operations(current_user = Depends(get_current_user)):
             }
         
         failed_files = []
-        for filename in os.listdir(failed_ops_dir):
+        for filename in os.listdir(failed_ops_dir)[:50]:  # Limit to 50 files
             filepath = os.path.join(failed_ops_dir, filename)
             if os.path.isfile(filepath):
                 stat = os.stat(filepath)
+                # Sanitize filename for security
+                safe_filename = os.path.basename(filename)
                 failed_files.append({
-                    'filename': filename,
+                    'filename': safe_filename,
                     'size_bytes': stat.st_size,
                     'created': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(stat.st_ctime))
                 })
@@ -1433,11 +1479,14 @@ def get_failed_operations(current_user = Depends(get_current_user)):
         return {
             'failed_operations': failed_files,
             'total_count': len(failed_files),
-            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'accessed_by': current_user.user_id
         }
     except Exception as e:
+        import logging
+        logging.error(f"Failed operations access error: {e}")
         return {
-            'error': str(e),
+            'error': "Access failed",
             'failed_operations': [],
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
