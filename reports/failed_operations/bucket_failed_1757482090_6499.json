@@ -1,0 +1,10 @@
+{
+  "timestamp": 1757482090.4533503,
+  "operation": "test_operation",
+  "error": "test error",
+  "metadata": {
+    "test": "data"
+  },
+  "storage_backend": "local",
+  "archived_at": "2025-09-10T10:58:10.453350"
+}

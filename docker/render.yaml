@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: ai-uploader-agent
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        value: sqlite:///./data.db
+      - key: BHIV_LM_URL
+        value: http://localhost:8001
+      - key: BHIV_STORAGE_BACKEND
+        value: local
+    disk:
+      name: ai-uploader-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 1

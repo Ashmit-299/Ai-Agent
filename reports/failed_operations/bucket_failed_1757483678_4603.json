@@ -1,0 +1,11 @@
+{
+  "timestamp": 1757483678.8121066,
+  "operation": "save_script",
+  "error": "[Errno 2] No such file or directory: '/non/existent/file.txt'",
+  "metadata": {
+    "local_path": "/non/existent/file.txt",
+    "dest_name": "test.txt"
+  },
+  "storage_backend": "local",
+  "archived_at": "2025-09-10T11:24:38.812106"
+}

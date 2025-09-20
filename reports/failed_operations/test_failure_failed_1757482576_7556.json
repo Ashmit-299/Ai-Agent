@@ -1,0 +1,9 @@
+{
+  "timestamp": 1757482576.3557942,
+  "datetime": "2025-09-10T11:06:16.355794",
+  "operation_type": "test_failure",
+  "error": "test error",
+  "metadata": {
+    "test": true
+  }
+}
