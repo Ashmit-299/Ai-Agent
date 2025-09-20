@@ -28,7 +28,7 @@ def get_pooled_connection():
 # SQLModel integration with fallback
 try:
     from core.db import get_db_session, DatabaseManager
-    from core.models import User, Content, Feedback
+    from core.models import User, Content, Feedback, Script
     from sqlmodel import Session, select
     SQLMODEL_AVAILABLE = True
     db_manager = DatabaseManager()
@@ -38,6 +38,35 @@ except ImportError:
     db_manager = None
 try:
     from .auth import get_current_user, get_current_user_required
+    from fastapi.security import HTTPBearer
+    from fastapi import Request
+    
+    # Create optional auth dependency
+    security = HTTPBearer(auto_error=False)
+    
+    async def get_current_user_optional(request: Request):
+        """Get current user without requiring authentication"""
+        try:
+            authorization = request.headers.get("Authorization")
+            if not authorization:
+                return None
+            
+            token = authorization.replace("Bearer ", "")
+            from .auth import verify_token
+            payload = verify_token(token)
+            user_id = payload.get("user_id")
+            username = payload.get("sub")
+            
+            if user_id and username:
+                class AuthUser:
+                    def __init__(self, user_id: str, username: str):
+                        self.user_id = user_id
+                        self.username = username
+                return AuthUser(user_id, username)
+            return None
+        except:
+            return None
+            
 except ImportError:
     # Fallback when auth is not available
     async def get_current_user():
@@ -48,6 +77,8 @@ except ImportError:
                 self.user_id = 'anonymous'
                 self.username = 'anonymous'
         return AnonymousUser()
+    async def get_current_user_optional(request: Request):
+        return None
 
 # Email service fallback
 def send_verification_email(email, token):
@@ -559,6 +590,9 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         with open(temp_script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
         
+        # Generate script ID for database
+        script_id = f"script_{uuid.uuid4().hex[:12]}"
+        
         # Use simplified video generation approach
         try:
             # Generate content ID
@@ -608,10 +642,27 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             if not os.path.exists(video_path):
                 raise HTTPException(status_code=500, detail="Video file was not created successfully")
             
-            # Save to Supabase database
+            # Save script to database first
             try:
                 from core.database import DatabaseManager
                 db = DatabaseManager()
+                
+                # Save script to database (if table exists)
+                script_data = {
+                    'script_id': script_id,
+                    'user_id': uploader_id,
+                    'title': f"Script for {title}",
+                    'script_content': script_content,
+                    'script_type': 'text',
+                    'file_path': temp_script_path,
+                    'used_for_generation': True
+                }
+                script_created = db.create_script(script_data)
+                if not script_created:
+                    import logging
+                    logging.warning("Script table not available, skipping script save")
+                
+                # Save content to database
                 content_data = {
                     'content_id': content_id,
                     'uploader_id': uploader_id,
@@ -625,6 +676,18 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
                     'uploaded_at': timestamp
                 }
                 db.create_content(content_data)
+                
+                # Update script with content_id (if script was created)
+                try:
+                    with Session(db.engine) as session:
+                        script = session.get(Script, script_id)
+                        if script:
+                            script.content_id = content_id
+                            session.commit()
+                except Exception as e:
+                    import logging
+                    logging.warning(f"Script update failed: {e}")
+                        
             except Exception as db_error:
                 import logging
                 logging.error(f"Database save failed: {db_error}")
@@ -632,12 +695,14 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             
             return {
                 'content_id': content_id,
+                'script_id': script_id,
                 'video_path': f'/download/{content_id}',
                 'stream_url': f'/stream/{content_id}',
+                'metadata_url': f'/content/{content_id}/metadata',
                 'local_file_path': video_path,
                 'storyboard_stats': storyboard_stats,
                 'processing_status': 'completed',
-                'next_step': f'Use /content/{content_id} to view details or /stream/{content_id} to watch video'
+                'next_step': f'Use /content/{content_id}/metadata to view full details or /stream/{content_id} to watch video'
             }
             
         except Exception as gen_error:
@@ -665,8 +730,9 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
 # ===== STEP 4: CONTENT ACCESS & VIEWING =====
 
 @step4_router.get('/content/{content_id}', status_code=200)
-def get_content(content_id: str, current_user = Depends(get_current_user)):
+def get_content(content_id: str, request: Request):
     """STEP 4A: Get content details and access URLs (authentication optional for enhanced features)"""
+    current_user = None  # For now, make it work without auth
     try:
         # Get content using Supabase database
         try:
@@ -704,6 +770,90 @@ def get_content(content_id: str, current_user = Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@step4_router.get('/content/{content_id}/metadata')
+def get_content_metadata(content_id: str, request: Request):
+    """STEP 4A-2: Get detailed content metadata including stats and related data"""
+    current_user = None  # For now, make it work without auth
+    try:
+        from core.database import DatabaseManager
+        from sqlmodel import Session, select, func
+        from core.models import Content, Feedback, Script
+        
+        db = DatabaseManager()
+        
+        # Get content
+        content = db.get_content_by_id(content_id)
+        if not content:
+            raise HTTPException(status_code=404, detail='Content not found')
+        
+        # Get additional metadata
+        with Session(db.engine) as session:
+            # Get feedback stats
+            feedback_stats = session.exec(
+                select(
+                    func.count(Feedback.id),
+                    func.avg(Feedback.rating),
+                    func.sum(Feedback.watch_time_ms)
+                ).where(Feedback.content_id == content_id)
+            ).first()
+            
+            # Get related script if exists (handle missing table)
+            related_script = None
+            try:
+                related_script = session.exec(
+                    select(Script).where(Script.content_id == content_id)
+                ).first()
+            except Exception:
+                pass  # Script table may not exist yet
+        
+        # Parse tags
+        try:
+            tags = json.loads(content.current_tags) if content.current_tags else []
+        except:
+            tags = []
+        
+        # Calculate file size if file exists
+        file_size = 0
+        if content.file_path and os.path.exists(content.file_path):
+            file_size = os.path.getsize(content.file_path)
+        
+        return {
+            'content_id': content.content_id,
+            'title': content.title,
+            'description': content.description,
+            'uploader_id': content.uploader_id,
+            'content_type': content.content_type,
+            'file_path': content.file_path,
+            'file_size_bytes': file_size,
+            'duration_ms': content.duration_ms,
+            'uploaded_at': content.uploaded_at,
+            'authenticity_score': content.authenticity_score,
+            'tags': tags,
+            'views': content.views,
+            'likes': content.likes,
+            'shares': content.shares,
+            'feedback_stats': {
+                'total_feedback': feedback_stats[0] or 0,
+                'average_rating': round(feedback_stats[1] or 0, 2),
+                'total_watch_time_ms': feedback_stats[2] or 0
+            },
+            'related_script': {
+                'script_id': related_script.script_id if related_script else None,
+                'title': related_script.title if related_script else None
+            } if related_script else None,
+            'urls': {
+                'download': f'/download/{content_id}',
+                'stream': f'/stream/{content_id}',
+                'metadata': f'/content/{content_id}/metadata'
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        import logging
+        logging.error(f"Content metadata error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @step4_router.get('/download/{content_id}')

@@ -46,6 +46,17 @@ class Feedback(SQLModel, table=True, extend_existing=True):
     engagement_score: Optional[float] = None
     timestamp: float = Field(default_factory=time.time)
 
+class Script(SQLModel, table=True, extend_existing=True):
+    script_id: str = Field(primary_key=True)
+    content_id: Optional[str] = Field(foreign_key="content.content_id")
+    user_id: str = Field(foreign_key="user.user_id")
+    title: str
+    script_content: str
+    script_type: str = "text"  # text, storyboard, etc.
+    file_path: Optional[str] = None
+    created_at: float = Field(default_factory=time.time)
+    used_for_generation: bool = False
+
 # Database engine and session management
 DATABASE_URL = "sqlite:///./data.db"
 engine = create_engine(DATABASE_URL, echo=False)

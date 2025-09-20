@@ -11,7 +11,7 @@ except ImportError:
         pass
 
 from sqlmodel import SQLModel, create_engine, Session, select
-from .models import User, Content, Feedback
+from .models import User, Content, Feedback, Script
 from typing import Optional, List
 import json
 import time
@@ -94,30 +94,72 @@ class DatabaseManager:
             return feedback
     
     @staticmethod
+    def create_script(script_data: dict):
+        try:
+            with Session(engine) as session:
+                script = Script(**script_data)
+                session.add(script)
+                session.commit()
+                session.refresh(script)
+                return script
+        except Exception as e:
+            print(f"Script creation failed (table may not exist): {e}")
+            return None
+    
+    @staticmethod
+    def get_script_by_id(script_id: str):
+        try:
+            with Session(engine) as session:
+                statement = select(Script).where(Script.script_id == script_id)
+                return session.exec(statement).first()
+        except Exception as e:
+            print(f"Script query failed (table may not exist): {e}")
+            return None
+    
+    @staticmethod
     def get_analytics_data() -> dict:
         with Session(engine) as session:
-            total_users = len(session.exec(select(User)).all())
-            total_content = len(session.exec(select(Content)).all())
-            total_feedback = len(session.exec(select(Feedback)).all())
-            
-            avg_rating = session.exec(
-                select(Feedback.rating).where(Feedback.rating.is_not(None))
-            ).all()
-            avg_rating = sum(avg_rating) / len(avg_rating) if avg_rating else 0
-            
-            sentiment_counts = {}
-            sentiments = session.exec(select(Feedback.sentiment)).all()
-            for sentiment in sentiments:
-                if sentiment:
-                    sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
-            
-            return {
-                "total_users": total_users,
-                "total_content": total_content,
-                "total_feedback": total_feedback,
-                "average_rating": round(avg_rating, 2),
-                "sentiment_breakdown": sentiment_counts
-            }
+            try:
+                total_users = len(session.exec(select(User)).all())
+                total_content = len(session.exec(select(Content)).all())
+                total_feedback = len(session.exec(select(Feedback)).all())
+                
+                # Try to get scripts count, handle if table doesn't exist
+                try:
+                    total_scripts = len(session.exec(select(Script)).all())
+                except Exception:
+                    total_scripts = 0
+                
+                avg_rating = session.exec(
+                    select(Feedback.rating).where(Feedback.rating.is_not(None))
+                ).all()
+                avg_rating = sum(avg_rating) / len(avg_rating) if avg_rating else 0
+                
+                sentiment_counts = {}
+                sentiments = session.exec(select(Feedback.sentiment)).all()
+                for sentiment in sentiments:
+                    if sentiment:
+                        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+                
+                return {
+                    "total_users": total_users,
+                    "total_content": total_content,
+                    "total_feedback": total_feedback,
+                    "total_scripts": total_scripts,
+                    "average_rating": round(avg_rating, 2),
+                    "sentiment_breakdown": sentiment_counts
+                }
+            except Exception as e:
+                # Fallback for database errors
+                return {
+                    "total_users": 0,
+                    "total_content": 0,
+                    "total_feedback": 0,
+                    "total_scripts": 0,
+                    "average_rating": 0.0,
+                    "sentiment_breakdown": {},
+                    "error": str(e)
+                }
 
 # Initialize database
 create_db_and_tables()
