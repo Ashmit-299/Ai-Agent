@@ -54,13 +54,13 @@ st.markdown("""
 def fetch_analytics():
     """Fetch analytics data from API with proper error handling and data validation"""
     try:
-        response = requests.get('http://127.0.0.1:8000/bhiv/analytics', timeout=5)
+        response = requests.get('http://127.0.0.1:9000/bhiv/analytics', timeout=5)
         if response.status_code == 200:
             data = response.json()
             
             # Get additional data from metrics endpoint for consistency
             try:
-                metrics_response = requests.get('http://127.0.0.1:8000/metrics', timeout=5)
+                metrics_response = requests.get('http://127.0.0.1:9000/metrics', timeout=5)
                 if metrics_response.status_code == 200:
                     metrics_data = metrics_response.json()
                     system_metrics = metrics_data.get('system_metrics', {})
@@ -112,7 +112,7 @@ def fetch_analytics():
 def fetch_system_metrics():
     """Fetch system metrics with proper error handling and data validation"""
     try:
-        response = requests.get('http://127.0.0.1:8000/metrics', timeout=5)
+        response = requests.get('http://127.0.0.1:9000/metrics', timeout=5)
         if response.status_code == 200:
             data = response.json()
             system_data = data.get('system_metrics', {})
@@ -145,7 +145,7 @@ def fetch_system_metrics():
 def fetch_task_queue_stats():
     """Fetch Step 7 task queue statistics"""
     try:
-        response = requests.get('http://127.0.0.1:8000/tasks/queue/stats', timeout=5)
+        response = requests.get('http://127.0.0.1:9000/tasks/queue/stats', timeout=5)
         if response.status_code == 200:
             data = response.json()
             queue_stats = data.get('queue_stats', {})
