@@ -101,10 +101,12 @@ os.makedirs('logs', exist_ok=True)
 # Create FastAPI app with security configuration
 app = FastAPI(
     title='AI Content Uploader Agent',
-    description='Secure AI-powered content analysis and recommendation system',
+    description='Secure AI-powered content analysis and recommendation system with Q-Learning RL',
     version='1.0.0',
     docs_url='/docs',
     redoc_url='/redoc',
+    openapi_url='/openapi.json',
+    swagger_ui_parameters={"defaultModelsExpandDepth": -1},
     openapi_tags=[
         {"name": "STEP 1: System Health & Demo Access", "description": "System status and demo credentials"},
         {"name": "STEP 2: User Authentication", "description": "User registration and login"},
@@ -183,10 +185,18 @@ async def enhanced_security_middleware(request: Request, call_next):
         
         # Add security headers
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        # Allow framing for docs pages
+        if safe_path.startswith('/docs') or safe_path.startswith('/redoc'):
+            response.headers["X-Frame-Options"] = "SAMEORIGIN"
+        else:
+            response.headers["X-Frame-Options"] = "DENY"
         response.headers["X-XSS-Protection"] = "1; mode=block"
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
+        # Relaxed CSP for FastAPI docs to work properly
+        if safe_path.startswith('/docs') or safe_path.startswith('/redoc') or safe_path == '/openapi.json':
+            response.headers["Content-Security-Policy"] = "default-src 'self' https://cdn.jsdelivr.net https://fastapi.tiangolo.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data: https://fastapi.tiangolo.com"
+        else:
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'"
         
         # Add rate limit headers
         response.headers["X-Rate-Limit-Remaining"] = "100"

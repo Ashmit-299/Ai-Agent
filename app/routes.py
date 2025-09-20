@@ -1,7 +1,7 @@
 import os, time, json, hashlib, traceback, uuid
 from datetime import datetime
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Body, Request, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from pydantic import BaseModel
 import sqlite3
 from typing import Optional, List, Dict, Any
@@ -173,6 +173,32 @@ def health_check_default():
             "version": "1.0.0",
             "message": "Use /docs for API documentation"
         }
+
+@router.get('/')
+def root():
+    """Root endpoint - redirect to API docs"""
+    return RedirectResponse(url="/docs")
+
+@router.get('/test')
+def simple_test():
+    """Simple test endpoint to verify server is working"""
+    return {
+        "status": "working",
+        "message": "Server is running correctly",
+        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+        "endpoints": {
+            "health": "/health",
+            "demo_login": "/demo-login", 
+            "api_docs": "/docs",
+            "contents": "/contents",
+            "metrics": "/metrics"
+        },
+        "next_steps": [
+            "Visit /docs for full API documentation",
+            "Use /demo-login to get test credentials",
+            "Try /contents to see available content"
+        ]
+    }
 
 # Remove all other endpoints from default router - they are now properly organized in step routers
 
