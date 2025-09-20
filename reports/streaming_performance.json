@@ -24,3 +24,5 @@
 {"session_id": "3513a40dfe08_716896_722e4188", "end_time": 1758346707.420499, "end_timestamp": "2025-09-20 11:08:27", "duration_seconds": 0.187, "bytes_served": 45379, "status_code": 200, "throughput_mbps": 1.85, "status": "completed"}
 {"session_id": "98445240cc89_57319097", "content_id": "98445240cc89", "client_ip": "127.0.0.1", "start_time": 1758356657.050863, "start_timestamp": "2025-09-20 13:54:17", "range_header": null, "status": "started"}
 {"session_id": "98445240cc89_57319097", "end_time": 1758356657.380268, "end_timestamp": "2025-09-20 13:54:17", "duration_seconds": 0.329, "bytes_served": 148573, "status_code": 200, "throughput_mbps": 3.44, "status": "completed"}
+{"session_id": "dee7602d7edf_25a03d33", "content_id": "dee7602d7edf", "client_ip": "127.0.0.1", "start_time": 1758359389.4813342, "start_timestamp": "2025-09-20 14:39:49", "range_header": null, "status": "started"}
+{"session_id": "dee7602d7edf_25a03d33", "end_time": 1758359391.0401597, "end_timestamp": "2025-09-20 14:39:51", "duration_seconds": 1.559, "bytes_served": 122132, "status_code": 200, "throughput_mbps": 0.6, "status": "completed"}
