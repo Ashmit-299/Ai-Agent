@@ -16,33 +16,88 @@ st.set_page_config(
     layout="wide"
 )
 
+def get_auth_headers():
+    """Get authentication headers for API requests"""
+    try:
+        # Try to get demo credentials and login
+        login_data = {"username": "demo", "password": "demo123"}
+        response = requests.post('http://127.0.0.1:9000/users/login', json=login_data, timeout=5)
+        if response.status_code == 200:
+            token = response.json().get('access_token')
+            return {'Authorization': f'Bearer {token}'}
+    except:
+        pass
+    return {}
+
 def fetch_data():
     """Fetch all data with error handling"""
     try:
-        # Analytics data
-        response = requests.get('http://127.0.0.1:9000/bhiv/analytics', timeout=5)
-        analytics = response.json() if response.status_code == 200 else {}
+        # Check API health first
+        health_response = requests.get('http://127.0.0.1:9000/health', timeout=5)
+        if health_response.status_code != 200:
+            raise Exception("API not healthy")
         
-        # System metrics
-        response = requests.get('http://127.0.0.1:9000/metrics', timeout=5)
-        metrics = response.json() if response.status_code == 200 else {}
+        # Get auth headers
+        headers = get_auth_headers()
         
-        # Task queue stats
-        response = requests.get('http://127.0.0.1:9000/tasks/queue/stats', timeout=5)
-        tasks = response.json() if response.status_code == 200 else {}
+        # Try protected endpoints with auth
+        analytics = {}
+        metrics = {}
+        tasks = {}
+        
+        try:
+            response = requests.get('http://127.0.0.1:9000/bhiv/analytics', headers=headers, timeout=5)
+            if response.status_code == 200:
+                analytics = response.json()
+        except:
+            pass
+        
+        try:
+            response = requests.get('http://127.0.0.1:9000/metrics', headers=headers, timeout=5)
+            if response.status_code == 200:
+                metrics = response.json()
+        except:
+            pass
+        
+        try:
+            response = requests.get('http://127.0.0.1:9000/tasks/queue/stats', headers=headers, timeout=5)
+            if response.status_code == 200:
+                tasks = response.json()
+        except:
+            pass
+        
+        # If no data from protected endpoints, use demo data
+        if not (analytics or metrics or tasks):
+            analytics = {
+                'total_users': 5,
+                'total_content': 12,
+                'total_feedback': 8,
+                'average_rating': 4.2,
+                'sentiment_breakdown': {'Positive': 6, 'Neutral': 2, 'Negative': 0},
+                'engagement_rate': 75
+            }
+            tasks = {
+                'queue_stats': {
+                    'total_tasks': 3,
+                    'pending_queue_size': 1,
+                    'workers_started': True
+                }
+            }
         
         return {
             'analytics': analytics,
             'metrics': metrics,
             'tasks': tasks,
-            'api_connected': bool(analytics or metrics)
+            'api_connected': True,
+            'auth_working': bool(headers and (analytics or metrics or tasks))
         }
     except:
         return {
             'analytics': {},
             'metrics': {},
             'tasks': {},
-            'api_connected': False
+            'api_connected': False,
+            'auth_working': False
         }
 
 def main():
@@ -52,6 +107,7 @@ def main():
     metrics = data['metrics']
     tasks = data['tasks']
     api_connected = data['api_connected']
+    auth_working = data['auth_working']
     
     # Header
     st.markdown("# 🚀 BHIV Analytics Dashboard")
@@ -66,6 +122,10 @@ def main():
         st.markdown("### 📡 System Status")
         if api_connected:
             st.success("🟢 API Connected")
+            if auth_working:
+                st.success("🔐 Auth Working")
+            else:
+                st.info("📊 Demo Mode")
         else:
             st.error("🔴 API Disconnected")
     
@@ -151,7 +211,10 @@ def main():
     # Status info
     st.markdown("---")
     if api_connected:
-        st.success("✅ Dashboard connected to API")
+        if auth_working:
+            st.success("✅ Dashboard fully connected to API with authentication")
+        else:
+            st.info("📊 Dashboard connected to API in demo mode. Showing sample data.")
     else:
         st.error("❌ Dashboard not connected to API - Check if server is running on port 9000")
     
