@@ -5,6 +5,8 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.12
       - key: JWS_SECRET
         value: SJOYupb2v8rFU8nd3+B7G/5Y90BB+x0ihG+vTZ6M3lcAKnC0ThJtBEQvZz5ZgigQ+ZC96vAbmJQ0+1FMtLmqUw==
       - key: DATABASE_URL
@@ -21,7 +23,3 @@ services:
         value: https://api.perplexity.ai
       - key: BHIV_STORAGE_BACKEND
         value: local
-    disk:
-      name: ai-uploader-data
-      mountPath: /opt/render/project/src/data
-      sizeGB: 2
