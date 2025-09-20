@@ -33,7 +33,7 @@ def main():
     
     subprocess.run([
         sys.executable, '-m', 'streamlit', 'run', dashboard_path,
-        '--server.port', '8501',
+        '--server.port', '8502',
         '--server.headless', 'false'
     ])
 

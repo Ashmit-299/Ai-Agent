@@ -290,6 +290,11 @@ def create_trend_chart(analytics_data, system_metrics_data):
     return fig
 
 def main():
+    # Fetch data first - before any UI elements
+    analytics = fetch_analytics()
+    system_metrics = fetch_system_metrics()
+    task_stats = fetch_task_queue_stats()
+    
     # Header
     st.markdown("""
     <div class="main-header">
@@ -297,11 +302,6 @@ def main():
         <p>Advanced AI-Powered Content Analytics Platform</p>
     </div>
     """, unsafe_allow_html=True)
-    
-    # Fetch data first
-    analytics = fetch_analytics()
-    system_metrics = fetch_system_metrics()
-    task_stats = fetch_task_queue_stats()
     
     # Define primary variables at the top to avoid UnboundLocalError
     primary_content = max(analytics['total_content'], system_metrics.get('total_contents', 0))
