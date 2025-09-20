@@ -16,20 +16,11 @@ requests==2.31.0
 moviepy==1.0.3
 Pillow==10.1.0
 python-dotenv==1.0.0
-
-# Task 6 Dependencies
 sentry-sdk==1.38.0
 posthog==3.0.2
 psycopg2-binary==2.9.9
-
-# Jinja2 Templates
 jinja2==3.1.2
-
-# Database Migrations
 alembic==1.13.1
-
-# Testing
 pytest>=7.0.0,<8.0.0
 pytest-httpx==0.21.3
 pytest-asyncio==0.23.0
-requests==2.31.0
