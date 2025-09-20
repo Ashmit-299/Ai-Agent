@@ -17,21 +17,26 @@ import json
 import time
 from datetime import datetime
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres.dusqpdhojbgfxwflukhc:Moto%40Roxy123@aws-1-ap-south-1.pooler.supabase.com:6543/postgres")
+# Use SQLite for local development, PostgreSQL for production
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./ai_agent.db")
 
-# Engine configuration for Supabase
-engine = create_engine(
-    DATABASE_URL,
-    echo=False,
-    pool_pre_ping=True,
-    pool_recycle=300,
-    pool_size=5,
-    max_overflow=10,
-    connect_args={
-        "connect_timeout": 10,
-        "sslmode": "require"
-    }
-)
+# Engine configuration
+if DATABASE_URL.startswith("sqlite"):
+    engine = create_engine(
+        DATABASE_URL,
+        echo=False,
+        connect_args={"check_same_thread": False}
+    )
+else:
+    # PostgreSQL configuration for production
+    engine = create_engine(
+        DATABASE_URL,
+        echo=False,
+        pool_pre_ping=True,
+        pool_recycle=300,
+        pool_size=5,
+        max_overflow=10
+    )
 
 def create_db_and_tables():
     try:
