@@ -644,15 +644,20 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         timestamp = time.time()
         uploader_id = current_user.user_id
         
-        # Generate actual video
-        from video.generator import create_simple_video
-        
-        # Create MP4 video file
+        # Create MP4 video file path first
         video_filename = f"{content_id}.mp4"
         video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
         
-        # Create video with frames
-        final_video_path = create_simple_video(script_content, video_path, duration=10.0)
+        # Use the video generator module
+        try:
+            from video.generator import create_simple_video
+            final_video_path = create_simple_video(script_content, video_path)
+        except Exception as video_error:
+            # If video generation fails, create text file with error
+            text_path = video_path.replace('.mp4', '.txt')
+            with open(text_path, 'w', encoding='utf-8') as f:
+                f.write(f"Video Script: {script_content}\n\nVideo generation failed: {str(video_error)}")
+            final_video_path = text_path
         
         # Determine content type based on actual file created
         content_type = 'video/mp4' if final_video_path.endswith('.mp4') else 'text/plain'

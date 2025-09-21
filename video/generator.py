@@ -1,13 +1,14 @@
 # video/generator.py
 import os
+import sys
 from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
 
+# Add the parent directory to sys.path to import core modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 try:
-    import sys
-    import os
-    sys.path.append(os.path.dirname(os.path.dirname(__file__)))
     from core import bhiv_bucket
 except ImportError:
     bhiv_bucket = None
@@ -56,21 +57,38 @@ SCENES:
     except Exception as e:
         raise ValueError(f"Storyboard text creation failed: {e}")
 
-def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> str:
-    """Create MP4 video with bold text, one sentence per frame"""
+def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> str:
+    """Create multi-frame video with each line in separate 3-second frame"""
+    
+    # First, try to import MoviePy
     try:
+        import moviepy.editor as mp
         from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+        moviepy_available = True
+    except ImportError as import_error:
+        moviepy_available = False
+        import_error_msg = str(import_error)
+    
+    # If MoviePy is not available, create a text file instead
+    if not moviepy_available:
+        text_path = output_path.replace('.mp4', '.txt')
+        with open(text_path, 'w', encoding='utf-8') as f:
+            f.write(f"Video Script: {text}\n\nVideo generation failed: {import_error_msg}")
+        return text_path
+    
+    try:
+        # Configure MoviePy to use ImageMagick
+        import moviepy.config as config
+        config.IMAGEMAGICK_BINARY = "magick"
+        
+        # Split text into sentences, remove \n characters
+        text = str(text).replace('\n', ' ').replace('\\n', ' ') if text else "No content"
+        # Split by sentence endings
         import re
-        
-        # Split text into sentences
-        text = str(text)[:2000] if text else "Sample Text"
         sentences = re.split(r'[.!?]+', text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-        
-        if not sentences:
-            sentences = [line.strip() for line in text.split('\n') if line.strip()]
-        if not sentences:
-            sentences = ["Sample Text"]
+        lines = [sentence.strip() for sentence in sentences if sentence.strip()]
+        if not lines:
+            lines = [text]
         
         # Ensure output path ends with .mp4
         if not output_path.endswith('.mp4'):
@@ -82,55 +100,58 @@ def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> s
             os.makedirs(output_dir, exist_ok=True)
         
         clips = []
-        frame_duration = 3.0  # 3 seconds per sentence
+        frame_duration = 3.0  # 3 seconds per frame
         
-        # Create a video clip for each sentence
-        for sentence in sentences:
-            # Create black background
+        for line in lines:
+            # Wrap text to fit screen with margins
+            words = line.split()
+            wrapped_lines = []
+            current_line = ""
+            max_chars = 50  # Approximate characters per line
+            
+            for word in words:
+                test_line = current_line + (" " if current_line else "") + word
+                if len(test_line) <= max_chars:
+                    current_line = test_line
+                else:
+                    if current_line:
+                        wrapped_lines.append(current_line)
+                        current_line = word
+                    else:
+                        wrapped_lines.append(word)
+            
+            if current_line:
+                wrapped_lines.append(current_line)
+            
+            wrapped_text = '\n'.join(wrapped_lines)
+            
+            # Create background
             bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
             
-            # Create bold text clip
-            try:
-                txt_clip = TextClip(
-                    sentence,
-                    fontsize=80,
-                    color='white',
-                    font='Arial-Bold',
-                    stroke_color='black',
-                    stroke_width=2,
-                    method='caption',
-                    size=(1700, 900)
-                ).set_duration(frame_duration).set_position('center')
-                
-                # Composite the clips
-                comp_clip = CompositeVideoClip([bg_clip, txt_clip])
-                clips.append(comp_clip)
-                
-            except Exception:
-                # Fallback: create simple text without bold
-                try:
-                    txt_clip = TextClip(
-                        sentence,
-                        fontsize=70,
-                        color='white',
-                        font='Arial'
-                    ).set_duration(frame_duration).set_position('center')
-                    
-                    comp_clip = CompositeVideoClip([bg_clip, txt_clip])
-                    clips.append(comp_clip)
-                except:
-                    # Last fallback: just background
-                    clips.append(bg_clip)
+            # Create text clip using MoviePy with ImageMagick
+            txt_clip = TextClip(
+                wrapped_text,
+                fontsize=80,
+                color='white',
+                font='Arial-Bold',
+                align='center',
+                size=(1720, None),
+                method='caption'
+            ).set_duration(frame_duration).set_position('center')
+            
+            # Composite the clips
+            comp_clip = CompositeVideoClip([bg_clip, txt_clip])
+            clips.append(comp_clip)
         
         # Concatenate all clips
         final_video = concatenate_videoclips(clips)
         
-        # Write video file
+        # Export video
         final_video.write_videofile(
             output_path,
             fps=24,
-            codec='libx264',
-            audio_codec='aac',
+            codec="libx264",
+            audio_codec="aac",
             verbose=False,
             logger=None
         )
@@ -140,7 +161,7 @@ def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> s
         for clip in clips:
             clip.close()
         
-        return output_path
+        return str(output_path)
         
     except Exception as e:
         # Fallback to text file if video generation fails
