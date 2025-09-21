@@ -244,11 +244,10 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     except ImportError:
         raise ImportError("moviepy and PIL are required: pip install moviepy==1.0.3 Pillow")
 
-    # Split text into sentences
-    sentences = re.split(r'[.!?]+', text)
-    sentences = [s.strip() for s in sentences if s.strip()]
-    if not sentences:
-        sentences = ["No content"]
+    # Split text by newlines - each line becomes one frame
+    lines = [line.strip() for line in text.split('\n') if line.strip()]
+    if not lines:
+        lines = ["No content"]
 
     clips = []
     
@@ -266,7 +265,7 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     
     max_width = 1600  # Leave margins
     
-    for sentence in sentences:
+    for line in lines:
         # Create background clip
         bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
         
@@ -274,16 +273,16 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Check if sentence fits on single line
-        bbox = draw.textbbox((0, 0), sentence, font=font)
+        # Check if line fits on single line
+        bbox = draw.textbbox((0, 0), line, font=font)
         text_width = bbox[2] - bbox[0]
         
         if text_width <= max_width:
             # Single line
-            display_text = sentence
+            display_text = line
         else:
             # Wrap to second line only if needed
-            words = sentence.split()
+            words = line.split()
             line1 = ""
             line2 = ""
             
