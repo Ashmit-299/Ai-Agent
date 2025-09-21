@@ -624,85 +624,115 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@step3_router.post('/generate-video')
-async def generate_video(file: UploadFile = File(...), title: str = Form(...), current_user = Depends(get_current_user)):
-    """STEP 3C: Generate content from text script (requires authentication)"""
+@step3_router.post('/generate-video', response_model=VideoGenerationResponse, status_code=202)
+async def generate_video(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    current_user = Depends(get_current_user),
+):
+    """STEP 3C: Generate video one frame per script line"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    
+
+    # Validate extension and size
+    ext = os.path.splitext(file.filename or '')[1].lower()
+    if ext != '.txt':
+        raise HTTPException(status_code=400, detail="Only .txt files allowed")
+    if file.size is not None and file.size > 1_048_576:
+        raise HTTPException(status_code=413, detail="Script file too large (max 1MB)")
+
+    # Read script
+    script_content = (await file.read()).decode('utf-8').strip()
+    if not script_content:
+        raise HTTPException(status_code=400, detail="Empty script content")
+
+    # Save temporary script
+    content_id = uuid.uuid4().hex[:12]
+    timestamp = time.time()
+    bucket_video_path = bhiv_bucket.get_bucket_path('videos', f"{content_id}.mp4")
+
+    # Generate multi-frame video
     try:
-        # Validate file
-        if not file.filename or not file.filename.endswith('.txt'):
-            raise HTTPException(status_code=400, detail="Only .txt files allowed")
-        
-        # Read script content
-        script_content = (await file.read()).decode('utf-8')
-        if not script_content.strip():
-            raise HTTPException(status_code=400, detail="Empty script content")
-        
-        # Generate IDs
-        content_id = uuid.uuid4().hex[:12]
-        timestamp = time.time()
-        uploader_id = current_user.user_id
-        
-        # Create MP4 video file path first
-        video_filename = f"{content_id}.mp4"
-        video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
-        
-        # Generate actual video using video generator - NO FALLBACK
-        try:
-            from video.generator import create_simple_video
-            final_video_path = create_simple_video(script_content, video_path, duration=10.0)
-            
-            # Verify it's actually an MP4 file
-            if not final_video_path.endswith('.mp4'):
-                raise Exception("Generated file is not MP4 format")
-                
-        except ImportError as import_error:
-            import logging
-            logging.error(f"MoviePy not installed: {import_error}")
-            raise HTTPException(status_code=500, detail="MoviePy is required but not installed. Please install: pip install moviepy")
-            
-        except Exception as video_error:
-            import logging
-            logging.error(f"Video generation failed: {video_error}")
-            raise HTTPException(status_code=500, detail=f"Video generation failed: {str(video_error)}")
-        
-        # Content type is always MP4
-        content_type = 'video/mp4'
-        
-        # Save to database
+        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+    except ImportError:
+        raise HTTPException(
+            status_code=500,
+            detail="MoviePy not installed. Run: pip install moviepy==1.0.3 imageio-ffmpeg==0.4.9"
+        )
+
+    # Split into lines, one frame each
+    lines = [line for line in script_content.split("\n") if line.strip()]
+    if not lines:
+        lines = [""]
+
+    frame_duration = 3.0  # seconds per frame
+    clips = []
+    for line in lines:
+        bg = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
+        txt = TextClip(
+            line,
+            fontsize=80,
+            color='white',
+            font='Arial-Bold',
+            align='center',
+            size=(1720, None),
+            method='caption'
+        ).set_duration(frame_duration).set_position('center')
+        clips.append(CompositeVideoClip([bg, txt]))
+
+    video = concatenate_videoclips(clips, method="compose")
+    try:
+        video.write_videofile(
+            bucket_video_path,
+            fps=24,
+            codec="libx264",
+            audio=False,
+            verbose=False,
+            logger=None
+        )
+    finally:
+        video.close()
+        for clip in clips:
+            clip.close()
+
+    # Verify video created
+    if not os.path.exists(bucket_video_path):
+        raise HTTPException(status_code=500, detail="Video file was not created")
+
+    # Save metadata to Supabase (optional)
+    try:
         from core.database import DatabaseManager
         db = DatabaseManager()
-        
         content_data = {
             'content_id': content_id,
-            'uploader_id': uploader_id,
+            'uploader_id': current_user.user_id,
             'title': title,
             'description': f'Generated video from script',
-            'file_path': final_video_path,
-            'content_type': content_type,
-            'duration_ms': 10000,
+            'file_path': bucket_video_path,
+            'content_type': 'video/mp4',
+            'duration_ms': int(frame_duration * len(lines) * 1000),
             'authenticity_score': 0.8,
             'current_tags': json.dumps(['generated', 'video', 'script']),
             'uploaded_at': timestamp
         }
         db.create_content(content_data)
-        
-        return {
-            'content_id': content_id,
-            'video_path': f'/download/{content_id}',
-            'stream_url': f'/stream/{content_id}',
-            'status': 'completed',
-            'message': 'Video generated successfully with text frames'
-        }
-            
-    except HTTPException:
-        raise
-    except Exception as e:
-        import logging
-        logging.error(f"Content generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Content generation failed: {str(e)}")
+    except Exception:
+        pass
+
+    return VideoGenerationResponse(
+        content_id=content_id,
+        video_path=f"/download/{content_id}",
+        stream_url=f"/stream/{content_id}",
+        local_file_path=bucket_video_path,
+        storyboard_stats={
+            "total_duration": frame_duration * len(lines),
+            "total_scenes": len(lines),
+            "version": "1.0",
+            "generation_method": "multi_frame",
+        },
+        processing_status="completed",
+        next_step=f"Use /content/{content_id} to view details or /stream/{content_id} to watch video"
+    )
 
 # ===== STEP 4: CONTENT ACCESS & VIEWING =====
 

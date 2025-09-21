@@ -64,27 +64,38 @@ SCENES:
         raise ValueError(f"Storyboard text creation failed: {e}")
 
 def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> str:
-    """Create a simple video with text overlay - No ImageMagick required"""
+    """Create a video with each sentence as a separate frame"""
     
     # Early check for MoviePy
     if not MOVIEPY_AVAILABLE:
         raise ImportError("MoviePy is not installed. Run: pip install moviepy==1.0.3")
     
     try:
-        from moviepy.editor import ColorClip, CompositeVideoClip
+        from moviepy.editor import ColorClip, CompositeVideoClip, concatenate_videoclips
         import numpy as np
         from PIL import Image, ImageDraw, ImageFont
         from moviepy.video.VideoClip import ImageClip
+        import re
         
         # Clean text
         text = str(text) if text else "No content"
         
-        # Create background clip
-        bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=duration)
+        # Split by both line breaks AND sentence endings - each gets its own frame
+        parts = []
+        for line in text.split('\n'):
+            line = line.strip()
+            if line:
+                # Split line by sentence endings
+                line_parts = re.split(r'[.!?]', line)
+                for part in line_parts:
+                    part = part.strip()
+                    if part:
+                        parts.append(part)
+        sentences = parts if parts else [text]
         
-        # Create text image using PIL (no ImageMagick needed)
-        img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
+        # Each sentence gets 3 seconds
+        frame_duration = 3.0
+        clips = []
         
         # Try to use a system font
         try:
@@ -95,44 +106,63 @@ def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> 
             except:
                 font = ImageFont.load_default()
         
-        # Word wrap text
-        words = text.split()
-        lines = []
-        current_line = ""
-        max_width = 1600  # Leave margins
-        
-        for word in words:
-            test_line = current_line + " " + word if current_line else word
-            bbox = draw.textbbox((0, 0), test_line, font=font)
+        for sentence in sentences:
+            # Create background clip for this sentence
+            bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
+            
+            # Create text image using PIL
+            img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+            
+            # Try to keep sentence on single line first
+            bbox = draw.textbbox((0, 0), sentence, font=font)
+            max_width = 1600  # Leave margins
+            
             if bbox[2] - bbox[0] <= max_width:
-                current_line = test_line
+                # Sentence fits on one line
+                text_lines = [sentence]
             else:
+                # Only wrap if sentence exceeds frame width
+                words = re.findall(r'\S+', sentence)
+                text_lines = []
+                current_line = ""
+                
+                for word in words:
+                    test_line = current_line + " " + word if current_line else word
+                    bbox = draw.textbbox((0, 0), test_line, font=font)
+                    if bbox[2] - bbox[0] <= max_width:
+                        current_line = test_line
+                    else:
+                        if current_line:
+                            text_lines.append(current_line)
+                        current_line = word
+                
                 if current_line:
-                    lines.append(current_line)
-                current_line = word
+                    text_lines.append(current_line)
+            
+            # Draw text centered
+            text_to_draw = "\n".join(text_lines)
+            bbox = draw.multiline_textbbox((0, 0), text_to_draw, font=font)
+            text_width = bbox[2] - bbox[0]
+            text_height = bbox[3] - bbox[1]
+            
+            x = (1920 - text_width) // 2
+            y = (1080 - text_height) // 2
+            
+            draw.multiline_text((x, y), text_to_draw, font=font, fill=(255, 255, 255, 255), align='center')
+            
+            # Convert PIL image to numpy array
+            img_array = np.array(img)
+            
+            # Create ImageClip from the array
+            text_clip = ImageClip(img_array, duration=frame_duration)
+            
+            # Composite the clips
+            frame_clip = CompositeVideoClip([bg_clip, text_clip])
+            clips.append(frame_clip)
         
-        if current_line:
-            lines.append(current_line)
-        
-        # Draw text centered
-        text_to_draw = "\n".join(lines)
-        bbox = draw.multiline_textbbox((0, 0), text_to_draw, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-        
-        x = (1920 - text_width) // 2
-        y = (1080 - text_height) // 2
-        
-        draw.multiline_text((x, y), text_to_draw, font=font, fill=(255, 255, 255, 255), align='center')
-        
-        # Convert PIL image to numpy array
-        img_array = np.array(img)
-        
-        # Create ImageClip from the array
-        text_clip = ImageClip(img_array, duration=duration)
-        
-        # Composite the clips
-        final_clip = CompositeVideoClip([bg_clip, text_clip])
+        # Concatenate all sentence clips
+        final_clip = concatenate_videoclips(clips)
         
         # Ensure output directory exists
         os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -148,8 +178,8 @@ def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> 
         
         # Clean up
         final_clip.close()
-        text_clip.close()
-        bg_clip.close()
+        for clip in clips:
+            clip.close()
         
         # Verify MP4 file was created
         if not os.path.exists(output_path) or not output_path.endswith('.mp4'):
@@ -199,3 +229,48 @@ def get_video_info(video_path: str) -> Dict:
         
     except Exception as e:
         raise ValueError(f"Failed to get video info: {e}")
+
+def create_multi_frame_video(text: str, output_path: str, frame_duration: float = 3.0) -> str:
+    """
+    Create a video where each non-empty line of text becomes its own frame.
+    Font, size, spacing, alignment, and resolution match the original settings.
+    """
+    try:
+        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+    except ImportError:
+        raise ImportError("moviepy is required: pip install moviepy==1.0.3")
+
+    lines = [line.strip() for line in text.split("\n") if line.strip()]
+    if not lines:
+        lines = [""]
+
+    clips = []
+    for line in lines:
+        bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
+        txt_clip = TextClip(
+            line,
+            fontsize=80,
+            color='white',
+            font='Arial-Bold',
+            align='center',
+            size=(1720, None),
+            method='caption'
+        ).set_duration(frame_duration).set_position('center')
+        clips.append(CompositeVideoClip([bg_clip, txt_clip]))
+
+    final_clip = concatenate_videoclips(clips, method="compose")
+    final_clip.write_videofile(
+        output_path,
+        fps=24,
+        codec="libx264",
+        audio=False,
+        verbose=False,
+        logger=None
+    )
+    final_clip.close()
+    for clip in clips:
+        clip.close()
+
+    if not os.path.exists(output_path):
+        raise ValueError(f"Failed to create MP4 file: {output_path}")
+    return output_path
