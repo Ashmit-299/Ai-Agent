@@ -460,7 +460,7 @@ def list_contents(limit: int = 20, current_user = Depends(get_current_user)):
             'next_step': 'POST /upload to add new content or POST /generate-video to create from script'
         }
 
-# Removed UploadResp - using ContentResponse from models.py
+# Simplified video generation endpoint above
 
 @step3_router.post('/upload', response_model=ContentResponse, status_code=201)
 async def upload(file: UploadFile = File(...), title: str = Form(...), description: str = Form(''), current_user = Depends(get_current_user), session: Session = Depends(get_session)):
@@ -623,228 +623,98 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-@step3_router.post('/generate-video', response_model=VideoGenerationResponse, status_code=202)
-async def generate_video(file: UploadFile = File(...), title: str = Form(...), current_user = Depends(get_current_user), session: Session = Depends(get_session)):
+@step3_router.post('/generate-video')
+async def generate_video(file: UploadFile = File(...), title: str = Form(...), current_user = Depends(get_current_user)):
     """STEP 3C: Generate video from text script (requires authentication)"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    
     try:
-        allowed_extensions = {'.txt'}
-        ext = os.path.splitext(file.filename or '')[1].lower()
-        if ext not in allowed_extensions:
+        # Validate file
+        if not file.filename or not file.filename.endswith('.txt'):
             raise HTTPException(status_code=400, detail="Only .txt files allowed")
         
-        if file.size is not None and file.size > 1 * 1024 * 1024:
-            raise HTTPException(status_code=413, detail="Script file too large (max 1MB)")
-        
-        # Save uploaded script to temporary file
+        # Read script content
         script_content = (await file.read()).decode('utf-8')
         if not script_content.strip():
             raise HTTPException(status_code=400, detail="Empty script content")
         
         # Generate IDs
-        script_id = f"script_{uuid.uuid4().hex[:12]}"
         content_id = uuid.uuid4().hex[:12]
         timestamp = time.time()
-        uploader_id = current_user.user_id if current_user else 'system'
+        uploader_id = current_user.user_id
         
-        # Create temporary script file
-        temp_script_path = bhiv_bucket.get_bucket_path("tmp", f"temp_script_{script_id}.txt")
-        with open(temp_script_path, 'w', encoding='utf-8') as f:
-            f.write(script_content)
-        
-        # Save script to bucket/scripts/
-        script_filename = f"{script_id}.txt"
+        # Generate video using simplified approach
         try:
-            script_bucket_path = bhiv_bucket.save_script(temp_script_path, script_filename)
-            import logging
-            logging.info(f"Script saved to bucket: {script_bucket_path}")
-        except Exception as script_save_error:
-            import logging
-            logging.error(f"Failed to save script to bucket: {script_save_error}")
-            script_bucket_path = temp_script_path
-        
-        # Generate tags from script content
-        generated_tags = suggest_tags(title, script_content[:500])  # Use first 500 chars for tags
-        generated_tags.extend(['generated', 'video', 'script'])
-        
-        # Create storyboard data
-        lines = [line.strip() for line in script_content.split('\n') if line.strip()]
-        storyboard_data = {
-            'content_id': content_id,
-            'script_id': script_id,
-            'title': title,
-            'scenes': [{
-                'scene_id': f'scene_{i}',
-                'duration': 2.0,
-                'frames': [{
-                    'text': line,
-                    'background_color': '#000000',
-                    'text_position': 'center'
-                }]
-            } for i, line in enumerate(lines)],
-            'total_duration': len(lines) * 2.0,
-            'generation_method': 'simple_text',
-            'created_at': timestamp
-        }
-        
-        # Save storyboard to bucket
-        storyboard_filename = f"{content_id}_storyboard.json"
-        try:
-            storyboard_path = bhiv_bucket.save_storyboard(storyboard_data, storyboard_filename)
-            import logging
-            logging.info(f"Storyboard saved to bucket: {storyboard_path}")
-        except Exception as storyboard_error:
-            import logging
-            logging.error(f"Failed to save storyboard: {storyboard_error}")
-            storyboard_path = None
-        
-        # Use simplified video generation approach
-        try:
-            # Create simple video directly from text
+            from video.generator import create_simple_video
             video_filename = f"{content_id}.mp4"
+            video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
             
-            # Generate actual video using video generator
-            try:
-                from video.generator import create_simple_video
-                # Ensure video is saved to bucket/videos/
-                bucket_video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
-                video_path = create_simple_video(script_content, bucket_video_path, duration=10.0)
-            except Exception as video_error:
-                import logging
-                logging.error(f"Video generation failed: {video_error}")
-                raise HTTPException(status_code=500, detail=f"Video generation failed: {str(video_error)}")
-            
-            # Calculate actual duration based on number of lines
-            line_count = max(1, len(lines))
-            frame_duration = 2.0  # 2 seconds per line
-            total_duration = line_count * frame_duration
-            duration_ms = int(total_duration * 1000)
-            
-            # Verify video file exists before saving to database
-            if not os.path.exists(video_path):
-                raise HTTPException(status_code=500, detail="Video file was not created successfully")
+            # Create video
+            final_video_path = create_simple_video(script_content, video_path, duration=5.0)
             
             # Save to database
-            try:
-                from core.database import DatabaseManager
-                db = DatabaseManager()
-                
-                # Save content to database FIRST (required for foreign key)
-                content_data = {
-                    'content_id': content_id,
-                    'uploader_id': uploader_id,
-                    'title': title,
-                    'description': f'Generated video from script: {script_id}',
-                    'file_path': video_path,
-                    'content_type': 'video/mp4',
-                    'duration_ms': duration_ms,
-                    'authenticity_score': 0.8,  # Generated content gets high authenticity
-                    'current_tags': json.dumps(generated_tags),
-                    'uploaded_at': timestamp
-                }
-                db.create_content(content_data)
-                import logging
-                logging.info(f"Content saved to database: {content_id}")
-                
-                # Save script to database AFTER content (foreign key dependency)
-                script_data = {
-                    'script_id': script_id,
-                    'content_id': content_id,
-                    'user_id': uploader_id,
-                    'title': f"Script for {title}",
-                    'script_content': script_content,
-                    'script_type': 'text',
-                    'file_path': script_bucket_path,
-                    'used_for_generation': True
-                }
-                script_created = db.create_script(script_data)
-                if script_created:
-                    import logging
-                    logging.info(f"Script saved to database: {script_id}")
-                else:
-                    import logging
-                    logging.warning("Script table not available, skipping script database save")
-                
-                # Save generation log
-                log_data = {
-                    'content_id': content_id,
-                    'script_id': script_id,
-                    'user_id': uploader_id,
-                    'action': 'video_generation',
-                    'status': 'completed',
-                    'duration_ms': duration_ms,
-                    'tags': generated_tags,
-                    'storyboard_path': storyboard_path,
-                    'timestamp': timestamp
-                }
-                log_filename = f"generation_{content_id}_{int(timestamp)}.json"
-                try:
-                    bhiv_bucket.save_json('logs', log_filename, log_data)
-                    import logging
-                    logging.info(f"Generation log saved: {log_filename}")
-                except Exception as log_error:
-                    import logging
-                    logging.warning(f"Failed to save generation log: {log_error}")
-                        
-            except Exception as db_error:
-                import logging
-                logging.error(f"Database save failed: {db_error}")
-                raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
+            from core.database import DatabaseManager
+            db = DatabaseManager()
             
-            # Clean up temp file
-            try:
-                if os.path.exists(temp_script_path):
-                    os.remove(temp_script_path)
-            except (OSError, FileNotFoundError) as e:
-                import logging
-                logging.warning(f"Failed to clean up temp script {temp_script_path}: {e}")
-            
-            # Simple stats for generated content
-            storyboard_stats = {
-                'total_duration': total_duration,
-                'total_scenes': len(lines),
-                'version': '1.0',
-                'generation_method': 'simple_text',
-                'storyboard_path': storyboard_path
+            content_data = {
+                'content_id': content_id,
+                'uploader_id': uploader_id,
+                'title': title,
+                'description': f'Generated video from script',
+                'file_path': final_video_path,
+                'content_type': 'video/mp4',
+                'duration_ms': 5000,
+                'authenticity_score': 0.8,
+                'current_tags': json.dumps(['generated', 'video', 'script']),
+                'uploaded_at': timestamp
             }
+            db.create_content(content_data)
             
             return {
                 'content_id': content_id,
-                'script_id': script_id,
                 'video_path': f'/download/{content_id}',
                 'stream_url': f'/stream/{content_id}',
-                'metadata_url': f'/content/{content_id}/metadata',
-                'local_file_path': video_path,
-                'script_bucket_path': script_bucket_path,
-                'storyboard_path': storyboard_path,
-                'generated_tags': generated_tags,
-                'storyboard_stats': storyboard_stats,
-                'processing_status': 'completed',
-                'next_step': f'Use /content/{content_id}/metadata to view full details or /stream/{content_id} to watch video'
+                'status': 'completed',
+                'message': 'Video generated successfully'
             }
             
-        except Exception as gen_error:
-            # Clean up temp file on error
-            try:
-                if os.path.exists(temp_script_path):
-                    os.remove(temp_script_path)
-            except (OSError, FileNotFoundError) as e:
-                import logging
-                logging.warning(f"Failed to clean up temp script on error {temp_script_path}: {e}")
+        except ImportError:
+            # Fallback: create text placeholder
+            placeholder_path = bhiv_bucket.get_bucket_path('videos', f"{content_id}.txt")
+            with open(placeholder_path, 'w', encoding='utf-8') as f:
+                f.write(f"Video Script: {title}\n\n{script_content}")
             
-            import logging
-            logging.error(f"Video generation error: {gen_error}")
-            raise HTTPException(status_code=500, detail=f"Video generation failed: {str(gen_error)}")
-        
+            from core.database import DatabaseManager
+            db = DatabaseManager()
+            
+            content_data = {
+                'content_id': content_id,
+                'uploader_id': uploader_id,
+                'title': title,
+                'description': f'Script placeholder (video generation unavailable)',
+                'file_path': placeholder_path,
+                'content_type': 'text/plain',
+                'duration_ms': 0,
+                'authenticity_score': 0.8,
+                'current_tags': json.dumps(['script', 'placeholder']),
+                'uploaded_at': timestamp
+            }
+            db.create_content(content_data)
+            
+            return {
+                'content_id': content_id,
+                'video_path': f'/download/{content_id}',
+                'status': 'placeholder_created',
+                'message': 'Video generation unavailable, script saved as text file'
+            }
+            
     except HTTPException:
         raise
     except Exception as e:
         import logging
         logging.error(f"Video generation error: {e}")
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Video generation failed: {str(e)}")
 
 # ===== STEP 4: CONTENT ACCESS & VIEWING =====
 
