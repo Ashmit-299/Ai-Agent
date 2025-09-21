@@ -2,7 +2,8 @@
 import os
 from pathlib import Path
 from typing import Dict, Optional
-import textwrap
+from datetime import datetime
+
 try:
     import sys
     import os
@@ -11,102 +12,91 @@ try:
 except ImportError:
     bhiv_bucket = None
 
-# Simplified MoviePy configuration
-try:
-    import moviepy.config as config
-    # Try to find ImageMagick automatically
-    imagemagick_paths = [
-        r"C:\Program Files\ImageMagick-7.1.2-Q16-HDRI\magick.exe",
-        r"C:\Program Files\ImageMagick\magick.exe",
-        "magick",  # System PATH
-        "convert"  # Fallback
-    ]
-    for path in imagemagick_paths:
-        if os.path.exists(path) or path in ["magick", "convert"]:
-            config.IMAGEMAGICK_BINARY = path
-            break
-except:
-    pass
-
 def render_video_from_storyboard(storyboard: Dict, output_path: str, width: int = 1280, height: int = 720) -> str:
-    """Simplified storyboard video rendering"""
+    """Create text representation of storyboard"""
     try:
-        from moviepy.editor import TextClip, CompositeVideoClip, concatenate_videoclips, ColorClip
-        
         if not storyboard.get("scenes"):
             raise ValueError("No scenes in storyboard")
         
-        clips = []
-        for scene in storyboard["scenes"]:
-            duration = scene.get("duration", 3.0)
-            
-            for frame in scene.get("frames", []):
-                text = frame.get("text", "Sample Text")[:100]
-                
-                # Create simple clip
-                bg_clip = ColorClip(size=(width, height), color=(0, 0, 0), duration=duration)
-                txt_clip = TextClip(
-                    text,
-                    fontsize=40,
-                    color='white',
-                    font='Arial'
-                ).set_duration(duration).set_position('center')
-                
-                comp_clip = CompositeVideoClip([bg_clip, txt_clip])
-                clips.append(comp_clip)
+        content = f"""STORYBOARD CONTENT
+{'=' * 50}
+
+Resolution: {width}x{height}
+Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{'=' * 50}
+SCENES:
+{'=' * 50}
+
+"""
         
-        if clips:
-            final_clip = concatenate_videoclips(clips)
-            final_clip.write_videofile(output_path, fps=24, verbose=False, logger=None)
-            final_clip.close()
-            for clip in clips:
-                clip.close()
+        for i, scene in enumerate(storyboard["scenes"], 1):
+            duration = scene.get("duration", 3.0)
+            content += f"Scene {i} (Duration: {duration}s):\n"
+            content += "-" * 30 + "\n"
+            
+            for j, frame in enumerate(scene.get("frames", []), 1):
+                text = frame.get("text", "Sample Text")
+                content += f"  Frame {j}: {text}\n"
+            content += "\n"
+        
+        content += "\n" + "="*50 + "\nEND OF STORYBOARD\n" + "="*50
+        
+        # Ensure directory exists
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+        
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(content)
         
         return output_path
         
     except Exception as e:
-        raise ValueError(f"Storyboard rendering failed: {e}")
+        raise ValueError(f"Storyboard text creation failed: {e}")
 
 def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> str:
-    """Create a simple video with text overlay"""
+    """Create a simple text file as video placeholder"""
     try:
-        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip
+        # Create a formatted text file instead of video
+        text = str(text)[:1000] if text else "Sample Text"
         
-        # Sanitize text
-        text = str(text)[:500] if text else "Sample Text"
+        # Create HTML-like content for better presentation
+        content = f"""VIDEO SCRIPT CONTENT
+{'=' * 50}
+
+Title: Generated Video
+Duration: {duration} seconds
+Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{'=' * 50}
+SCRIPT CONTENT:
+{'=' * 50}
+
+{text}
+
+{'=' * 50}
+END OF SCRIPT
+{'=' * 50}
+
+Note: This is a text representation of the video content.
+Video generation requires MoviePy which is not available.
+"""
         
-        # Create black background
-        bg_clip = ColorClip(size=(1280, 720), color=(0, 0, 0), duration=duration)
+        # Ensure directory exists
+        output_dir = os.path.dirname(output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
         
-        # Create text clip
-        txt_clip = TextClip(
-            text,
-            fontsize=50,
-            color='white',
-            font='Arial',
-            size=(1200, 600)
-        ).set_duration(duration).set_position('center')
-        
-        # Composite video
-        video = CompositeVideoClip([bg_clip, txt_clip])
-        
-        # Write video file
-        video.write_videofile(
-            output_path,
-            fps=24,
-            verbose=False,
-            logger=None
-        )
-        
-        # Clean up
-        video.close()
-        bg_clip.close()
-        txt_clip.close()
+        # Write to file
+        with open(output_path, 'w', encoding='utf-8') as f:
+            f.write(content)
         
         return output_path
         
     except Exception as e:
-        raise ValueError(f"Video creation failed: {e}")
+        raise ValueError(f"Text file creation failed: {e}")
 
 def get_video_info(video_path: str) -> Dict:
     """Get basic information about generated video"""

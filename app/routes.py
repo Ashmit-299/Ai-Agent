@@ -625,7 +625,7 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
 
 @step3_router.post('/generate-video')
 async def generate_video(file: UploadFile = File(...), title: str = Form(...), current_user = Depends(get_current_user)):
-    """STEP 3C: Generate video from text script (requires authentication)"""
+    """STEP 3C: Generate content from text script (requires authentication)"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
     
@@ -644,77 +644,47 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         timestamp = time.time()
         uploader_id = current_user.user_id
         
-        # Generate video using simplified approach
-        try:
-            from video.generator import create_simple_video
-            video_filename = f"{content_id}.mp4"
-            video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
-            
-            # Create video
-            final_video_path = create_simple_video(script_content, video_path, duration=5.0)
-            
-            # Save to database
-            from core.database import DatabaseManager
-            db = DatabaseManager()
-            
-            content_data = {
-                'content_id': content_id,
-                'uploader_id': uploader_id,
-                'title': title,
-                'description': f'Generated video from script',
-                'file_path': final_video_path,
-                'content_type': 'video/mp4',
-                'duration_ms': 5000,
-                'authenticity_score': 0.8,
-                'current_tags': json.dumps(['generated', 'video', 'script']),
-                'uploaded_at': timestamp
-            }
-            db.create_content(content_data)
-            
-            return {
-                'content_id': content_id,
-                'video_path': f'/download/{content_id}',
-                'stream_url': f'/stream/{content_id}',
-                'status': 'completed',
-                'message': 'Video generated successfully'
-            }
-            
-        except ImportError:
-            # Fallback: create text placeholder
-            placeholder_path = bhiv_bucket.get_bucket_path('videos', f"{content_id}.txt")
-            with open(placeholder_path, 'w', encoding='utf-8') as f:
-                f.write(f"Video Script: {title}\n\n{script_content}")
-            
-            from core.database import DatabaseManager
-            db = DatabaseManager()
-            
-            content_data = {
-                'content_id': content_id,
-                'uploader_id': uploader_id,
-                'title': title,
-                'description': f'Script placeholder (video generation unavailable)',
-                'file_path': placeholder_path,
-                'content_type': 'text/plain',
-                'duration_ms': 0,
-                'authenticity_score': 0.8,
-                'current_tags': json.dumps(['script', 'placeholder']),
-                'uploaded_at': timestamp
-            }
-            db.create_content(content_data)
-            
-            return {
-                'content_id': content_id,
-                'video_path': f'/download/{content_id}',
-                'status': 'placeholder_created',
-                'message': 'Video generation unavailable, script saved as text file'
-            }
+        # Generate content using text-based approach
+        from video.generator import create_simple_video
+        
+        # Always create as text file (no video dependencies)
+        content_filename = f"{content_id}.txt"
+        content_path = bhiv_bucket.get_bucket_path('videos', content_filename)
+        
+        # Create formatted text content
+        final_content_path = create_simple_video(script_content, content_path, duration=5.0)
+        
+        # Save to database
+        from core.database import DatabaseManager
+        db = DatabaseManager()
+        
+        content_data = {
+            'content_id': content_id,
+            'uploader_id': uploader_id,
+            'title': title,
+            'description': f'Generated content from script',
+            'file_path': final_content_path,
+            'content_type': 'text/plain',
+            'duration_ms': 5000,
+            'authenticity_score': 0.8,
+            'current_tags': json.dumps(['generated', 'script', 'text']),
+            'uploaded_at': timestamp
+        }
+        db.create_content(content_data)
+        
+        return {
+            'content_id': content_id,
+            'content_path': f'/download/{content_id}',
+            'status': 'completed',
+            'message': 'Script content generated successfully as formatted text file'
+        }
             
     except HTTPException:
         raise
     except Exception as e:
         import logging
-        logging.error(f"Video generation error: {e}")
-        raise HTTPException(status_code=500, detail=f"Video generation failed: {str(e)}")
+        logging.error(f"Content generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Content generation failed: {str(e)}")
 
 # ===== STEP 4: CONTENT ACCESS & VIEWING =====
 
