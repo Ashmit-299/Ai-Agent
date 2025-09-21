@@ -281,19 +281,25 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
             # Single line
             display_text = line
         else:
-            # Wrap to second line only if needed
+            # Wrap text properly - fill both lines completely
             words = line.split()
             line1 = ""
             line2 = ""
             
             for word in words:
-                test_line = line1 + " " + word if line1 else word
-                test_bbox = draw.textbbox((0, 0), test_line, font=font)
-                if test_bbox[2] - test_bbox[0] <= max_width:
-                    line1 = test_line
+                # Try adding to line1 first
+                test_line1 = line1 + " " + word if line1 else word
+                test_bbox1 = draw.textbbox((0, 0), test_line1, font=font)
+                
+                if test_bbox1[2] - test_bbox1[0] <= max_width:
+                    line1 = test_line1
                 else:
-                    line2 = " ".join(words[len(line1.split()):])
-                    break
+                    # Try adding to line2
+                    test_line2 = line2 + " " + word if line2 else word
+                    test_bbox2 = draw.textbbox((0, 0), test_line2, font=font)
+                    
+                    if test_bbox2[2] - test_bbox2[0] <= max_width:
+                        line2 = test_line2
             
             display_text = line1 + "\n" + line2 if line2 else line1
         
@@ -306,7 +312,7 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         x = (1920 - text_width) // 2
         y = (1080 - text_height) // 2
         
-        # Draw text
+        # Draw text with special characters support
         draw.multiline_text((x, y), display_text, font=font, fill=(255, 255, 255, 255), align='center')
         
         # Convert PIL image to numpy array
