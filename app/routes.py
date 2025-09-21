@@ -651,53 +651,28 @@ async def generate_video(
     timestamp = time.time()
     bucket_video_path = bhiv_bucket.get_bucket_path('videos', f"{content_id}.mp4")
 
-    # Generate multi-frame video
+    # Use the create_multi_frame_video function from video.generator
     try:
-        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+        from video.generator import create_multi_frame_video
+        create_multi_frame_video(script_content, bucket_video_path, frame_duration=3.0)
     except ImportError:
         raise HTTPException(
             status_code=500,
-            detail="MoviePy not installed. Run: pip install moviepy==1.0.3 imageio-ffmpeg==0.4.9"
+            detail="Video generator not available. Check MoviePy installation."
         )
-
-    # Split into lines, one frame each
-    lines = [line for line in script_content.split("\n") if line.strip()]
-    if not lines:
-        lines = [""]
-
-    frame_duration = 3.0  # seconds per frame
-    clips = []
-    for line in lines:
-        bg = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
-        txt = TextClip(
-            line,
-            fontsize=80,
-            color='white',
-            font='Arial-Bold',
-            align='center',
-            size=(1720, None),
-            method='caption'
-        ).set_duration(frame_duration).set_position('center')
-        clips.append(CompositeVideoClip([bg, txt]))
-
-    video = concatenate_videoclips(clips, method="compose")
-    try:
-        video.write_videofile(
-            bucket_video_path,
-            fps=24,
-            codec="libx264",
-            audio=False,
-            verbose=False,
-            logger=None
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Video generation failed: {str(e)}"
         )
-    finally:
-        video.close()
-        for clip in clips:
-            clip.close()
 
     # Verify video created
     if not os.path.exists(bucket_video_path):
         raise HTTPException(status_code=500, detail="Video file was not created")
+
+    # Count lines for metadata
+    lines = [line for line in script_content.split("\n") if line.strip()]
+    frame_duration = 3.0
 
     # Save metadata to Supabase (optional)
     try:

@@ -233,30 +233,63 @@ def get_video_info(video_path: str) -> Dict:
 def create_multi_frame_video(text: str, output_path: str, frame_duration: float = 3.0) -> str:
     """
     Create a video where each non-empty line of text becomes its own frame.
-    Font, size, spacing, alignment, and resolution match the original settings.
+    Uses PIL for text rendering to avoid ImageMagick dependency.
     """
     try:
-        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+        from moviepy.editor import ColorClip, CompositeVideoClip, concatenate_videoclips
+        from moviepy.video.VideoClip import ImageClip
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
     except ImportError:
-        raise ImportError("moviepy is required: pip install moviepy==1.0.3")
+        raise ImportError("moviepy and PIL are required: pip install moviepy==1.0.3 Pillow")
 
     lines = [line.strip() for line in text.split("\n") if line.strip()]
     if not lines:
-        lines = [""]
+        lines = ["No content"]
 
     clips = []
+    
+    # Try to load a system font
+    try:
+        font = ImageFont.truetype("arial.ttf", 80)
+    except:
+        try:
+            font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 80)
+        except:
+            try:
+                font = ImageFont.truetype("C:/Windows/Fonts/calibri.ttf", 80)
+            except:
+                font = ImageFont.load_default()
+    
     for line in lines:
+        # Create background clip
         bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
-        txt_clip = TextClip(
-            line,
-            fontsize=80,
-            color='white',
-            font='Arial-Bold',
-            align='center',
-            size=(1720, None),
-            method='caption'
-        ).set_duration(frame_duration).set_position('center')
-        clips.append(CompositeVideoClip([bg_clip, txt_clip]))
+        
+        # Create text image using PIL
+        img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        
+        # Get text dimensions
+        bbox = draw.textbbox((0, 0), line, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        # Center the text
+        x = (1920 - text_width) // 2
+        y = (1080 - text_height) // 2
+        
+        # Draw text
+        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+        
+        # Convert PIL image to numpy array
+        img_array = np.array(img)
+        
+        # Create ImageClip from the array
+        text_clip = ImageClip(img_array, duration=frame_duration)
+        
+        # Composite the clips
+        frame_clip = CompositeVideoClip([bg_clip, text_clip])
+        clips.append(frame_clip)
 
     final_clip = concatenate_videoclips(clips, method="compose")
     final_clip.write_videofile(
