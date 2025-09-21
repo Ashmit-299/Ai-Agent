@@ -644,15 +644,18 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         timestamp = time.time()
         uploader_id = current_user.user_id
         
-        # Generate content using text-based approach
+        # Generate actual video
         from video.generator import create_simple_video
         
-        # Always create as text file (no video dependencies)
-        content_filename = f"{content_id}.txt"
-        content_path = bhiv_bucket.get_bucket_path('videos', content_filename)
+        # Create MP4 video file
+        video_filename = f"{content_id}.mp4"
+        video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
         
-        # Create formatted text content
-        final_content_path = create_simple_video(script_content, content_path, duration=5.0)
+        # Create video with frames
+        final_video_path = create_simple_video(script_content, video_path, duration=10.0)
+        
+        # Determine content type based on actual file created
+        content_type = 'video/mp4' if final_video_path.endswith('.mp4') else 'text/plain'
         
         # Save to database
         from core.database import DatabaseManager
@@ -662,21 +665,22 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             'content_id': content_id,
             'uploader_id': uploader_id,
             'title': title,
-            'description': f'Generated content from script',
-            'file_path': final_content_path,
-            'content_type': 'text/plain',
-            'duration_ms': 5000,
+            'description': f'Generated video from script',
+            'file_path': final_video_path,
+            'content_type': content_type,
+            'duration_ms': 10000,
             'authenticity_score': 0.8,
-            'current_tags': json.dumps(['generated', 'script', 'text']),
+            'current_tags': json.dumps(['generated', 'video', 'script']),
             'uploaded_at': timestamp
         }
         db.create_content(content_data)
         
         return {
             'content_id': content_id,
-            'content_path': f'/download/{content_id}',
+            'video_path': f'/download/{content_id}',
+            'stream_url': f'/stream/{content_id}',
             'status': 'completed',
-            'message': 'Script content generated successfully as formatted text file'
+            'message': 'Video generated successfully with text frames'
         }
             
     except HTTPException:
