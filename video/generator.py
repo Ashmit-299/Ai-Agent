@@ -232,20 +232,23 @@ def get_video_info(video_path: str) -> Dict:
 
 def create_multi_frame_video(text: str, output_path: str, frame_duration: float = 3.0) -> str:
     """
-    Create a video where each non-empty line of text becomes its own frame.
-    Uses PIL for text rendering to avoid ImageMagick dependency.
+    Create a video where each sentence becomes its own frame.
+    Each sentence stays on single line unless it exceeds frame width.
     """
     try:
         from moviepy.editor import ColorClip, CompositeVideoClip, concatenate_videoclips
         from moviepy.video.VideoClip import ImageClip
         import numpy as np
         from PIL import Image, ImageDraw, ImageFont
+        import re
     except ImportError:
         raise ImportError("moviepy and PIL are required: pip install moviepy==1.0.3 Pillow")
 
-    lines = [line.strip() for line in text.split("\n") if line.strip()]
-    if not lines:
-        lines = ["No content"]
+    # Split text into sentences
+    sentences = re.split(r'[.!?]+', text)
+    sentences = [s.strip() for s in sentences if s.strip()]
+    if not sentences:
+        sentences = ["No content"]
 
     clips = []
     
@@ -261,7 +264,9 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
             except:
                 font = ImageFont.load_default()
     
-    for line in lines:
+    max_width = 1600  # Leave margins
+    
+    for sentence in sentences:
         # Create background clip
         bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
         
@@ -269,8 +274,32 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Get text dimensions
-        bbox = draw.textbbox((0, 0), line, font=font)
+        # Check if sentence fits on single line
+        bbox = draw.textbbox((0, 0), sentence, font=font)
+        text_width = bbox[2] - bbox[0]
+        
+        if text_width <= max_width:
+            # Single line
+            display_text = sentence
+        else:
+            # Wrap to second line only if needed
+            words = sentence.split()
+            line1 = ""
+            line2 = ""
+            
+            for word in words:
+                test_line = line1 + " " + word if line1 else word
+                test_bbox = draw.textbbox((0, 0), test_line, font=font)
+                if test_bbox[2] - test_bbox[0] <= max_width:
+                    line1 = test_line
+                else:
+                    line2 = " ".join(words[len(line1.split()):])
+                    break
+            
+            display_text = line1 + "\n" + line2 if line2 else line1
+        
+        # Get final text dimensions
+        bbox = draw.multiline_textbbox((0, 0), display_text, font=font)
         text_width = bbox[2] - bbox[0]
         text_height = bbox[3] - bbox[1]
         
@@ -279,7 +308,7 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         y = (1080 - text_height) // 2
         
         # Draw text
-        draw.text((x, y), line, font=font, fill=(255, 255, 255, 255))
+        draw.multiline_text((x, y), display_text, font=font, fill=(255, 255, 255, 255), align='center')
         
         # Convert PIL image to numpy array
         img_array = np.array(img)
