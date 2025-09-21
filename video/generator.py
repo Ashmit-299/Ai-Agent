@@ -57,46 +57,97 @@ SCENES:
         raise ValueError(f"Storyboard text creation failed: {e}")
 
 def create_simple_video(text: str, output_path: str, duration: float = 5.0) -> str:
-    """Create a simple text file as video placeholder"""
+    """Create MP4 video with bold text, one sentence per frame"""
     try:
-        # Create a formatted text file instead of video
-        text = str(text)[:1000] if text else "Sample Text"
+        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
+        import re
         
-        # Create HTML-like content for better presentation
-        content = f"""VIDEO SCRIPT CONTENT
-{'=' * 50}
-
-Title: Generated Video
-Duration: {duration} seconds
-Created: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
-
-{'=' * 50}
-SCRIPT CONTENT:
-{'=' * 50}
-
-{text}
-
-{'=' * 50}
-END OF SCRIPT
-{'=' * 50}
-
-Note: This is a text representation of the video content.
-Video generation requires MoviePy which is not available.
-"""
+        # Split text into sentences
+        text = str(text)[:2000] if text else "Sample Text"
+        sentences = re.split(r'[.!?]+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        
+        if not sentences:
+            sentences = [line.strip() for line in text.split('\n') if line.strip()]
+        if not sentences:
+            sentences = ["Sample Text"]
+        
+        # Ensure output path ends with .mp4
+        if not output_path.endswith('.mp4'):
+            output_path = output_path.replace('.txt', '.mp4')
         
         # Ensure directory exists
         output_dir = os.path.dirname(output_path)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
         
-        # Write to file
-        with open(output_path, 'w', encoding='utf-8') as f:
-            f.write(content)
+        clips = []
+        frame_duration = 3.0  # 3 seconds per sentence
+        
+        # Create a video clip for each sentence
+        for sentence in sentences:
+            # Create black background
+            bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
+            
+            # Create bold text clip
+            try:
+                txt_clip = TextClip(
+                    sentence,
+                    fontsize=80,
+                    color='white',
+                    font='Arial-Bold',
+                    stroke_color='black',
+                    stroke_width=2,
+                    method='caption',
+                    size=(1700, 900)
+                ).set_duration(frame_duration).set_position('center')
+                
+                # Composite the clips
+                comp_clip = CompositeVideoClip([bg_clip, txt_clip])
+                clips.append(comp_clip)
+                
+            except Exception:
+                # Fallback: create simple text without bold
+                try:
+                    txt_clip = TextClip(
+                        sentence,
+                        fontsize=70,
+                        color='white',
+                        font='Arial'
+                    ).set_duration(frame_duration).set_position('center')
+                    
+                    comp_clip = CompositeVideoClip([bg_clip, txt_clip])
+                    clips.append(comp_clip)
+                except:
+                    # Last fallback: just background
+                    clips.append(bg_clip)
+        
+        # Concatenate all clips
+        final_video = concatenate_videoclips(clips)
+        
+        # Write video file
+        final_video.write_videofile(
+            output_path,
+            fps=24,
+            codec='libx264',
+            audio_codec='aac',
+            verbose=False,
+            logger=None
+        )
+        
+        # Clean up
+        final_video.close()
+        for clip in clips:
+            clip.close()
         
         return output_path
         
     except Exception as e:
-        raise ValueError(f"Text file creation failed: {e}")
+        # Fallback to text file if video generation fails
+        text_path = output_path.replace('.mp4', '.txt')
+        with open(text_path, 'w', encoding='utf-8') as f:
+            f.write(f"Video Script: {text}\n\nVideo generation failed: {str(e)}")
+        return text_path
 
 def get_video_info(video_path: str) -> Dict:
     """Get basic information about generated video"""
