@@ -8,6 +8,15 @@ from datetime import datetime
 # Add the parent directory to sys.path to import core modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+# Debug check for MoviePy
+try:
+    import moviepy.editor
+    print("MoviePy successfully imported")
+    MOVIEPY_AVAILABLE = True
+except ImportError as e:
+    print(f"MoviePy import failed: {e}")
+    MOVIEPY_AVAILABLE = False
+
 try:
     from core import bhiv_bucket
 except ImportError:
@@ -56,6 +65,11 @@ SCENES:
 
 def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> str:
     """Create a simple video with text overlay - No ImageMagick required"""
+    
+    # Early check for MoviePy
+    if not MOVIEPY_AVAILABLE:
+        raise ImportError("MoviePy is not installed. Run: pip install moviepy==1.0.3")
+    
     try:
         from moviepy.editor import ColorClip, CompositeVideoClip
         import numpy as np
