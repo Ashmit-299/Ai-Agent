@@ -648,19 +648,27 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
         video_filename = f"{content_id}.mp4"
         video_path = bhiv_bucket.get_bucket_path('videos', video_filename)
         
-        # Use the video generator module
+        # Generate actual video using video generator - NO FALLBACK
         try:
             from video.generator import create_simple_video
-            final_video_path = create_simple_video(script_content, video_path)
+            final_video_path = create_simple_video(script_content, video_path, duration=10.0)
+            
+            # Verify it's actually an MP4 file
+            if not final_video_path.endswith('.mp4'):
+                raise Exception("Generated file is not MP4 format")
+                
+        except ImportError as import_error:
+            import logging
+            logging.error(f"MoviePy not installed: {import_error}")
+            raise HTTPException(status_code=500, detail="MoviePy is required but not installed. Please install: pip install moviepy")
+            
         except Exception as video_error:
-            # If video generation fails, create text file with error
-            text_path = video_path.replace('.mp4', '.txt')
-            with open(text_path, 'w', encoding='utf-8') as f:
-                f.write(f"Video Script: {script_content}\n\nVideo generation failed: {str(video_error)}")
-            final_video_path = text_path
+            import logging
+            logging.error(f"Video generation failed: {video_error}")
+            raise HTTPException(status_code=500, detail=f"Video generation failed: {str(video_error)}")
         
-        # Determine content type based on actual file created
-        content_type = 'video/mp4' if final_video_path.endswith('.mp4') else 'text/plain'
+        # Content type is always MP4
+        content_type = 'video/mp4'
         
         # Save to database
         from core.database import DatabaseManager

@@ -43,10 +43,7 @@ SCENES:
         
         content += "\n" + "="*50 + "\nEND OF STORYBOARD\n" + "="*50
         
-        # Ensure directory exists
-        output_dir = os.path.dirname(output_path)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
+
         
         # Write to file
         with open(output_path, 'w', encoding='utf-8') as f:
@@ -58,117 +55,97 @@ SCENES:
         raise ValueError(f"Storyboard text creation failed: {e}")
 
 def create_simple_video(text: str, output_path: str, duration: float = 10.0) -> str:
-    """Create multi-frame video with each line in separate 3-second frame"""
-    
-    # First, try to import MoviePy
+    """Create a simple video with text overlay - No ImageMagick required"""
     try:
-        import moviepy.editor as mp
-        from moviepy.editor import TextClip, ColorClip, CompositeVideoClip, concatenate_videoclips
-        moviepy_available = True
-    except ImportError as import_error:
-        moviepy_available = False
-        import_error_msg = str(import_error)
-    
-    # If MoviePy is not available, create a text file instead
-    if not moviepy_available:
-        text_path = output_path.replace('.mp4', '.txt')
-        with open(text_path, 'w', encoding='utf-8') as f:
-            f.write(f"Video Script: {text}\n\nVideo generation failed: {import_error_msg}")
-        return text_path
-    
-    try:
-        # Configure MoviePy to use ImageMagick
-        import moviepy.config as config
-        config.IMAGEMAGICK_BINARY = "magick"
+        from moviepy.editor import ColorClip, CompositeVideoClip
+        import numpy as np
+        from PIL import Image, ImageDraw, ImageFont
+        from moviepy.video.VideoClip import ImageClip
         
-        # Split text into sentences, remove \n characters
-        text = str(text).replace('\n', ' ').replace('\\n', ' ') if text else "No content"
-        # Split by sentence endings
-        import re
-        sentences = re.split(r'[.!?]+', text)
-        lines = [sentence.strip() for sentence in sentences if sentence.strip()]
-        if not lines:
-            lines = [text]
+        # Clean text
+        text = str(text) if text else "No content"
         
-        # Ensure output path ends with .mp4
-        if not output_path.endswith('.mp4'):
-            output_path = output_path.replace('.txt', '.mp4')
+        # Create background clip
+        bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=duration)
         
-        # Ensure directory exists
-        output_dir = os.path.dirname(output_path)
-        if output_dir:
-            os.makedirs(output_dir, exist_ok=True)
+        # Create text image using PIL (no ImageMagick needed)
+        img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
         
-        clips = []
-        frame_duration = 3.0  # 3 seconds per frame
+        # Try to use a system font
+        try:
+            font = ImageFont.truetype("arial.ttf", 80)
+        except:
+            try:
+                font = ImageFont.truetype("C:/Windows/Fonts/arial.ttf", 80)
+            except:
+                font = ImageFont.load_default()
         
-        for line in lines:
-            # Wrap text to fit screen with margins
-            words = line.split()
-            wrapped_lines = []
-            current_line = ""
-            max_chars = 50  # Approximate characters per line
-            
-            for word in words:
-                test_line = current_line + (" " if current_line else "") + word
-                if len(test_line) <= max_chars:
-                    current_line = test_line
-                else:
-                    if current_line:
-                        wrapped_lines.append(current_line)
-                        current_line = word
-                    else:
-                        wrapped_lines.append(word)
-            
-            if current_line:
-                wrapped_lines.append(current_line)
-            
-            wrapped_text = '\n'.join(wrapped_lines)
-            
-            # Create background
-            bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
-            
-            # Create text clip using MoviePy with ImageMagick
-            txt_clip = TextClip(
-                wrapped_text,
-                fontsize=80,
-                color='white',
-                font='Arial-Bold',
-                align='center',
-                size=(1720, None),
-                method='caption'
-            ).set_duration(frame_duration).set_position('center')
-            
-            # Composite the clips
-            comp_clip = CompositeVideoClip([bg_clip, txt_clip])
-            clips.append(comp_clip)
+        # Word wrap text
+        words = text.split()
+        lines = []
+        current_line = ""
+        max_width = 1600  # Leave margins
         
-        # Concatenate all clips
-        final_video = concatenate_videoclips(clips)
+        for word in words:
+            test_line = current_line + " " + word if current_line else word
+            bbox = draw.textbbox((0, 0), test_line, font=font)
+            if bbox[2] - bbox[0] <= max_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = word
         
-        # Export video
-        final_video.write_videofile(
+        if current_line:
+            lines.append(current_line)
+        
+        # Draw text centered
+        text_to_draw = "\n".join(lines)
+        bbox = draw.multiline_textbbox((0, 0), text_to_draw, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        x = (1920 - text_width) // 2
+        y = (1080 - text_height) // 2
+        
+        draw.multiline_text((x, y), text_to_draw, font=font, fill=(255, 255, 255, 255), align='center')
+        
+        # Convert PIL image to numpy array
+        img_array = np.array(img)
+        
+        # Create ImageClip from the array
+        text_clip = ImageClip(img_array, duration=duration)
+        
+        # Composite the clips
+        final_clip = CompositeVideoClip([bg_clip, text_clip])
+        
+        # Ensure output directory exists
+        os.makedirs(os.path.dirname(output_path), exist_ok=True)
+        
+        # Export as MP4
+        final_clip.write_videofile(
             output_path,
             fps=24,
             codec="libx264",
-            audio_codec="aac",
             verbose=False,
             logger=None
         )
         
         # Clean up
-        final_video.close()
-        for clip in clips:
-            clip.close()
+        final_clip.close()
+        text_clip.close()
+        bg_clip.close()
         
+        # Verify MP4 file was created
+        if not os.path.exists(output_path) or not output_path.endswith('.mp4'):
+            raise ValueError(f"Failed to create MP4 file: {output_path}")
+            
         return str(output_path)
         
     except Exception as e:
-        # Fallback to text file if video generation fails
-        text_path = output_path.replace('.mp4', '.txt')
-        with open(text_path, 'w', encoding='utf-8') as f:
-            f.write(f"Video Script: {text}\n\nVideo generation failed: {str(e)}")
-        return text_path
+        raise ValueError(f"Video creation failed: {e}")
+
 
 def get_video_info(video_path: str) -> Dict:
     """Get basic information about generated video"""
