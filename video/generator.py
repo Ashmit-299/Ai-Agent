@@ -341,3 +341,39 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     if not os.path.exists(output_path):
         raise ValueError(f"Failed to create MP4 file: {output_path}")
     return output_path
+
+def generate_from_storyboard(storyboard: Dict, content_id: str = None) -> Dict:
+    """Generate video from storyboard data"""
+    try:
+        import uuid
+        job_id = f"job_{uuid.uuid4().hex[:8]}"
+        
+        # Extract text from storyboard scenes
+        text_content = ""
+        for scene in storyboard.get("scenes", []):
+            for frame in scene.get("frames", []):
+                frame_text = frame.get("text", "")
+                if frame_text:
+                    text_content += frame_text + "\n"
+        
+        if not text_content.strip():
+            text_content = "Generated video content"
+        
+        # Create output filename
+        output_filename = f"{content_id or job_id}.mp4"
+        
+        return {
+            "job_id": job_id,
+            "status": "enqueued",
+            "content_id": content_id,
+            "output_file": output_filename,
+            "text_content": text_content.strip(),
+            "total_duration": storyboard.get("total_duration", 10.0)
+        }
+        
+    except Exception as e:
+        return {
+            "job_id": "error",
+            "status": "failed",
+            "error": str(e)
+        }

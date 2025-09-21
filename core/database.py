@@ -56,8 +56,14 @@ def get_session():
         yield session
 
 class DatabaseManager:
-    def __init__(self):
-        self.engine = engine
+    def __init__(self, db_path=None):
+        if db_path:
+            self.engine = create_engine(f"sqlite:///{db_path}", connect_args={"check_same_thread": False})
+        else:
+            self.engine = engine
+    
+    def get_connection(self):
+        return self.engine.connect()
     
     @staticmethod
     def create_user(user_data: dict):

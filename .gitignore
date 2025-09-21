@@ -65,9 +65,9 @@ secrets.json
 # Agent state
 agent_state.json
 
-# Test files
-test_*.py
-*_test.py
+# Test output files (but keep test scripts)
+test_output.txt
+test_results.json
 
 # Temporary files
 *.bak

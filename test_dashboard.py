@@ -7,6 +7,7 @@ Tests dashboard functionality and API connections
 import requests
 import time
 import sys
+import os
 
 def test_api_connection():
     """Test API server connection"""
@@ -126,21 +127,27 @@ def main():
         endpoints_ok = test_dashboard_endpoints()
     else:
         print("\nSkipping endpoint tests (API not running)")
-        endpoints_ok = True  # Don't fail if API not running
+        endpoints_ok = True  # Don't fail in CI
     
     # Summary
     print("\n" + "=" * 40)
     print("Test Summary:")
-    print(f"  Imports: {'PASS' if imports_ok else 'FAIL'}")
-    print(f"  API Connection: {'PASS' if api_ok else 'SKIP (CI/CD)'}")
-    print(f"  Endpoints: {'PASS' if endpoints_ok else 'SKIP (CI/CD)'}")
+    print(f"Imports: {'PASS' if imports_ok else 'FAIL'}")
+    print(f"API Connection: {'PASS' if api_ok else 'SKIP'}")
+    print(f"Endpoints: {'PASS' if endpoints_ok else 'SKIP'}")
     
-    # Always succeed if imports pass (CI-friendly)
+    if not api_ok:
+        print("\nNote: API server not running (expected in CI/CD environments)")
+    
+    # Always pass if imports work (CI-friendly)
     if imports_ok:
-        print("\n[SUCCESS] Core imports passed. Dashboard ready for CI/CD.")
+        if api_ok and endpoints_ok:
+            print("\n✅ All tests passed")
+        else:
+            print("\n✅ Core imports passed (API server not required in CI)")
         return 0
     else:
-        print("\n[ERROR] Import tests failed. Check dependencies.")
+        print("\n❌ Error: Import tests failed. Check dependencies.")
         return 1
 
 if __name__ == "__main__":

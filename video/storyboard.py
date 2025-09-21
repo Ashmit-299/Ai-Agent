@@ -88,6 +88,10 @@ def wrap_text_for_storyboard(text: str, max_chars_per_line: int = 50) -> str:
         else:
             line2 = " ".join([line2, word]).strip()
     
+    # Ensure line2 doesn't exceed max length either
+    if line2 and len(line2) > max_chars_per_line:
+        line2 = line2[:max_chars_per_line-3] + "..."
+    
     if line2:
         return f"{line1}\n{line2}"
     return line1

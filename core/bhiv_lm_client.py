@@ -239,7 +239,7 @@ async def _log_lm_interaction(operation: str, status: str, metadata: Dict[str, A
 
 def is_llm_configured() -> bool:
     """Check if LLM service is properly configured"""
-    return bool(BHIV_LM_URL and API_KEY and API_KEY != "default_api_key")
+    return bool(BHIV_LM_URL and API_KEY and API_KEY not in ["default_api_key", "demo_api_key_123"])
 
 def get_llm_config() -> Dict[str, Any]:
     """Get current LLM configuration (without sensitive data)"""
