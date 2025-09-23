@@ -1,58 +1,37 @@
-from logging.config import fileConfig
-
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
-from alembic import context
+#!/usr/bin/env python3
+"""
+Alembic environment configuration for AI Agent project
+"""
 import os
-from dotenv import load_dotenv
+import sys
+from logging.config import fileConfig
+from sqlalchemy import engine_from_config, pool
+from alembic import context
 
-# Load environment variables
-load_dotenv()
+# Add project root to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-# this is the Alembic Config object, which provides
-# access to the values within the .ini file in use.
+# Import your SQLModel models
+from core.models import User, Content, Feedback, Script
+from sqlmodel import SQLModel
+
+# this is the Alembic Config object
 config = context.config
 
-# Set DATABASE_URL from environment (escape % for ConfigParser)
-db_url = os.getenv('DATABASE_URL')
-if not db_url:
-    raise RuntimeError("DATABASE_URL must be set")
-# Escape % characters for ConfigParser
-db_url = db_url.replace('%', '%%')
-config.set_main_option('sqlalchemy.url', db_url)
-
-# Interpret the config file for Python logging.
-# This line sets up loggers basically.
+# Interpret the config file for Python logging
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# Import SQLModel metadata
-try:
-    from core.models import SQLModel
-    target_metadata = SQLModel.metadata
-except ImportError:
-    target_metadata = None
+# Add your model's MetaData object here for 'autogenerate' support
+target_metadata = SQLModel.metadata
 
-# other values from the config, defined by the needs of env.py,
-# can be acquired:
-# my_important_option = config.get_main_option("my_important_option")
-# ... etc.
-
+def get_url():
+    """Get database URL from environment or config"""
+    return os.getenv("DATABASE_URL", config.get_main_option("sqlalchemy.url"))
 
 def run_migrations_offline() -> None:
-    """Run migrations in 'offline' mode.
-
-    This configures the context with just a URL
-    and not an Engine, though an Engine is acceptable
-    here as well.  By skipping the Engine creation
-    we don't even need a DBAPI to be available.
-
-    Calls to context.execute() here emit the given string to the
-    script output.
-
-    """
-    url = config.get_main_option("sqlalchemy.url")
+    """Run migrations in 'offline' mode."""
+    url = get_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -63,28 +42,41 @@ def run_migrations_offline() -> None:
     with context.begin_transaction():
         context.run_migrations()
 
-
 def run_migrations_online() -> None:
-    """Run migrations in 'online' mode.
-
-    In this scenario we need to create an Engine
-    and associate a connection with the context.
-
-    """
-    connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
-        prefix="sqlalchemy.",
-        poolclass=pool.NullPool,
-    )
+    """Run migrations in 'online' mode."""
+    configuration = config.get_section(config.config_ini_section)
+    configuration["sqlalchemy.url"] = get_url()
+    
+    # Handle SQLite vs PostgreSQL differences
+    database_url = get_url()
+    if database_url.startswith("sqlite"):
+        # SQLite specific configuration
+        connectable = engine_from_config(
+            configuration,
+            prefix="sqlalchemy.",
+            poolclass=pool.NullPool,
+            connect_args={"check_same_thread": False}
+        )
+    else:
+        # PostgreSQL configuration for production
+        connectable = engine_from_config(
+            configuration,
+            prefix="sqlalchemy.",
+            poolclass=pool.QueuePool,
+            pool_pre_ping=True,
+            pool_recycle=300
+        )
 
     with connectable.connect() as connection:
         context.configure(
-            connection=connection, target_metadata=target_metadata
+            connection=connection, 
+            target_metadata=target_metadata,
+            compare_type=True,
+            compare_server_default=True
         )
 
         with context.begin_transaction():
             context.run_migrations()
-
 
 if context.is_offline_mode():
     run_migrations_offline()
