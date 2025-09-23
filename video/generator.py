@@ -298,27 +298,26 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
             # Single line
             display_text = sentence
         else:
-            # Wrap text properly - fill both lines completely
+            # Wrap text properly - handle all words
             words = sentence.split()
-            line1 = ""
-            line2 = ""
+            lines = []
+            current_line = ""
             
             for word in words:
-                # Try adding to line1 first
-                test_line1 = line1 + " " + word if line1 else word
-                test_bbox1 = draw.textbbox((0, 0), test_line1, font=font)
+                test_line = current_line + " " + word if current_line else word
+                test_bbox = draw.textbbox((0, 0), test_line, font=font)
                 
-                if test_bbox1[2] - test_bbox1[0] <= max_width:
-                    line1 = test_line1
+                if test_bbox[2] - test_bbox[0] <= max_width:
+                    current_line = test_line
                 else:
-                    # Try adding to line2
-                    test_line2 = line2 + " " + word if line2 else word
-                    test_bbox2 = draw.textbbox((0, 0), test_line2, font=font)
-                    
-                    if test_bbox2[2] - test_bbox2[0] <= max_width:
-                        line2 = test_line2
+                    if current_line:
+                        lines.append(current_line)
+                    current_line = word
             
-            display_text = line1 + "\n" + line2 if line2 else line1
+            if current_line:
+                lines.append(current_line)
+            
+            display_text = "\n".join(lines)
         
         # Get final text dimensions
         bbox = draw.multiline_textbbox((0, 0), display_text, font=font)
