@@ -1,214 +1,391 @@
-# app/security.py
+#!/usr/bin/env python3
+"""
+Production-grade security configuration for AI Agent
+"""
+
+import os
+import secrets
 import hashlib
 import hmac
 import time
-import logging
 import json
-from typing import Optional, Dict, Any
-from fastapi import HTTPException, Request
+from typing import Optional, Dict, Any, List
+from datetime import datetime, timedelta
+from fastapi import HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi import Depends, HTTPException, status
-from datetime import datetime
-import os
+from jose import jwt, JWTError
+from passlib.context import CryptContext
+import logging
 
-# JWT imports with fallback
-try:
-    from jose import JWTError, jwt
-    JWT_AVAILABLE = True
-except ImportError:
-    JWT_AVAILABLE = False
-    import base64
+logger = logging.getLogger(__name__)
 
-# Structured logging setup
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-)
-security_logger = logging.getLogger('security')
-rate_limit_logger = logging.getLogger('rate_limit')
-
-security = HTTPBearer()
-
-# Security configuration - Use environment variables
-SECRET_KEY = os.getenv("SECRET_KEY", "a_very_secret_key_that_should_be_changed_in_production_and_is_at_least_32_bytes_long")
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
-
-# Rate limiting
-RATE_LIMIT_REQUESTS = 100
-RATE_LIMIT_WINDOW = 3600  # 1 hour
-
-class SecurityManager:
-    def __init__(self):
-        self.rate_limit_store: Dict[str, list] = {}
-        self.security = HTTPBearer(auto_error=False)
-        self.failed_attempts: Dict[str, int] = {}
-        self.blocked_ips: Dict[str, float] = {}
+# Security Configuration
+class SecurityConfig:
+    # JWT Configuration
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", secrets.token_urlsafe(32))
+    JWT_ALGORITHM = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 hours
+    REFRESH_TOKEN_EXPIRE_DAYS = 30
     
-    def create_access_token(self, data: dict, expires_delta: Optional[int] = None):
-        """Create JWT access token with logging"""
-        to_encode = data.copy()
-        if expires_delta:
-            expire = time.time() + expires_delta
-        else:
-            expire = time.time() + (ACCESS_TOKEN_EXPIRE_MINUTES * 60)
-        
-        to_encode.update({"exp": expire})
-        
-        if JWT_AVAILABLE:
-            encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-        else:
-            # Fallback token creation
-            token_data = json.dumps(to_encode, default=str)
-            encoded_jwt = base64.b64encode(token_data.encode()).decode()
-        
-        security_logger.info(f"Token created for user: {data.get('sub', 'unknown')}")
-        return encoded_jwt
+    # Password Configuration
+    PWD_CONTEXT = CryptContext(schemes=["bcrypt"], deprecated="auto")
+    MIN_PASSWORD_LENGTH = 8
     
-    def verify_token(self, token: str) -> dict:
-        """Verify JWT token with logging"""
+    # Rate Limiting Configuration
+    MAX_LOGIN_ATTEMPTS = 5
+    LOGIN_LOCKOUT_DURATION = 900  # 15 minutes
+    
+    # Security Headers
+    SECURITY_HEADERS = {
+        "X-Content-Type-Options": "nosniff",
+        "X-Frame-Options": "DENY",
+        "X-XSS-Protection": "1; mode=block",
+        "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+        "Content-Security-Policy": "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'",
+        "Referrer-Policy": "strict-origin-when-cross-origin"
+    }
+
+config = SecurityConfig()
+
+# Password Security
+class PasswordManager:
+    @staticmethod
+    def hash_password(password: str) -> str:
+        """Hash password using bcrypt"""
+        if len(password) < config.MIN_PASSWORD_LENGTH:
+            raise ValueError(f"Password must be at least {config.MIN_PASSWORD_LENGTH} characters")
+        return config.PWD_CONTEXT.hash(password)
+    
+    @staticmethod
+    def verify_password(plain_password: str, hashed_password: str) -> bool:
+        """Verify password against hash"""
         try:
-            if JWT_AVAILABLE:
-                payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            else:
-                # Fallback token verification
-                token_data = base64.b64decode(token.encode()).decode()
-                payload = json.loads(token_data)
-                # Check expiration
-                if payload.get('exp', 0) < time.time():
-                    raise HTTPException(status_code=401, detail="Token expired")
+            return config.PWD_CONTEXT.verify(plain_password, hashed_password)
+        except Exception as e:
+            logger.warning(f"Password verification failed: {e}")
+            return False
+    
+    @staticmethod
+    def validate_password_strength(password: str) -> Dict[str, Any]:
+        """Validate password strength"""
+        issues = []
+        score = 0
+        
+        if len(password) < config.MIN_PASSWORD_LENGTH:
+            issues.append(f"Must be at least {config.MIN_PASSWORD_LENGTH} characters")
+        else:
+            score += 1
+            
+        if not any(c.isupper() for c in password):
+            issues.append("Must contain uppercase letter")
+        else:
+            score += 1
+            
+        if not any(c.islower() for c in password):
+            issues.append("Must contain lowercase letter")
+        else:
+            score += 1
+            
+        if not any(c.isdigit() for c in password):
+            issues.append("Must contain number")
+        else:
+            score += 1
+            
+        if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+            issues.append("Must contain special character")
+        else:
+            score += 1
+        
+        return {
+            "valid": len(issues) == 0,
+            "score": score,
+            "max_score": 5,
+            "issues": issues
+        }
+
+# JWT Token Management
+class JWTManager:
+    @staticmethod
+    def create_access_token(data: Dict[str, Any], expires_delta: Optional[timedelta] = None) -> str:
+        """Create JWT access token with enhanced security"""
+        to_encode = data.copy()
+        
+        if expires_delta:
+            expire = datetime.utcnow() + expires_delta
+        else:
+            expire = datetime.utcnow() + timedelta(minutes=config.ACCESS_TOKEN_EXPIRE_MINUTES)
+        
+        # Add security claims
+        to_encode.update({
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "type": "access",
+            "jti": secrets.token_urlsafe(16)  # JWT ID for tracking
+        })
+        
+        try:
+            return jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+        except Exception as e:
+            logger.error(f"Token creation failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token creation failed"
+            )
+    
+    @staticmethod
+    def create_refresh_token(user_id: str) -> str:
+        """Create refresh token"""
+        expire = datetime.utcnow() + timedelta(days=config.REFRESH_TOKEN_EXPIRE_DAYS)
+        
+        to_encode = {
+            "user_id": user_id,
+            "exp": expire,
+            "iat": datetime.utcnow(),
+            "type": "refresh",
+            "jti": secrets.token_urlsafe(16)
+        }
+        
+        return jwt.encode(to_encode, config.JWT_SECRET_KEY, algorithm=config.JWT_ALGORITHM)
+    
+    @staticmethod
+    def verify_token(token: str, token_type: str = "access") -> Dict[str, Any]:
+        """Verify and decode JWT token with enhanced security"""
+        try:
+            payload = jwt.decode(
+                token, 
+                config.JWT_SECRET_KEY, 
+                algorithms=[config.JWT_ALGORITHM]
+            )
+            
+            # Verify token type
+            if payload.get("type") != token_type:
+                raise JWTError(f"Invalid token type. Expected {token_type}")
+            
+            # Verify required claims
+            required_claims = ["exp", "iat", "jti"]
+            if token_type == "access":
+                required_claims.extend(["user_id", "sub"])
+            
+            for claim in required_claims:
+                if claim not in payload:
+                    raise JWTError(f"Missing required claim: {claim}")
             
             return payload
+            
+        except jwt.ExpiredSignatureError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Token has expired",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        except jwt.JWTError as e:
+            logger.warning(f"Token verification failed: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid token",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        except Exception as e:
+            logger.error(f"Token verification error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Token verification failed"
+            )
+
+# Rate Limiting for Authentication
+class AuthRateLimiter:
+    def __init__(self):
+        self.attempts = {}  # {ip: {count: int, last_attempt: float, locked_until: float}}
+    
+    def is_locked(self, client_ip: str) -> bool:
+        """Check if IP is currently locked"""
+        if client_ip in self.attempts:
+            attempt_data = self.attempts[client_ip]
+            if "locked_until" in attempt_data and time.time() < attempt_data["locked_until"]:
+                return True
+        return False
+    
+    def record_attempt(self, client_ip: str, success: bool) -> Dict[str, Any]:
+        """Record authentication attempt"""
+        current_time = time.time()
+        
+        if client_ip not in self.attempts:
+            self.attempts[client_ip] = {"count": 0, "last_attempt": current_time}
+        
+        attempt_data = self.attempts[client_ip]
+        
+        if success:
+            # Reset on successful login
+            self.attempts[client_ip] = {"count": 0, "last_attempt": current_time}
+            return {"locked": False, "attempts_remaining": config.MAX_LOGIN_ATTEMPTS}
+        else:
+            # Increment failed attempts
+            attempt_data["count"] += 1
+            attempt_data["last_attempt"] = current_time
+            
+            if attempt_data["count"] >= config.MAX_LOGIN_ATTEMPTS:
+                # Lock the IP
+                attempt_data["locked_until"] = current_time + config.LOGIN_LOCKOUT_DURATION
+                return {
+                    "locked": True, 
+                    "locked_until": attempt_data["locked_until"],
+                    "attempts_remaining": 0
+                }
+            
+            return {
+                "locked": False,
+                "attempts_remaining": config.MAX_LOGIN_ATTEMPTS - attempt_data["count"]
+            }
+
+# Global rate limiter instance
+auth_rate_limiter = AuthRateLimiter()
+
+# Security Middleware
+class SecurityManager:
+    def __init__(self):
+        self.security_bearer = HTTPBearer(auto_error=False)
+    
+    def get_client_ip(self, request: Request) -> str:
+        """Extract client IP with proxy support"""
+        # Check for forwarded headers (proxy/load balancer)
+        forwarded_for = request.headers.get("X-Forwarded-For")
+        if forwarded_for:
+            return forwarded_for.split(",")[0].strip()
+        
+        real_ip = request.headers.get("X-Real-IP")
+        if real_ip:
+            return real_ip
+        
+        # Fallback to direct connection
+        if request.client:
+            return request.client.host
+        
+        return "unknown"
+    
+    async def authenticate_request(self, request: Request) -> Optional[Dict[str, Any]]:
+        """Authenticate request and return user data"""
+        try:
+            # Get authorization header
+            credentials: HTTPAuthorizationCredentials = await self.security_bearer(request)
+            if not credentials:
+                return None
+            
+            if credentials.scheme.lower() != "bearer":
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid authentication scheme"
+                )
+            
+            # Verify token
+            payload = JWTManager.verify_token(credentials.credentials, "access")
+            
+            return {
+                "user_id": payload.get("user_id"),
+                "username": payload.get("sub"),
+                "token_jti": payload.get("jti"),
+                "token_iat": payload.get("iat")
+            }
+            
         except HTTPException:
             raise
         except Exception as e:
-            security_logger.warning(f"Token verification failed: {str(e)}")
-            raise HTTPException(status_code=401, detail="Invalid token")
-    
-    def check_rate_limit(self, client_ip: str) -> bool:
-        """Enhanced rate limiting with logging and IP blocking"""
-        current_time = time.time()
-        
-        # Check if IP is blocked
-        if client_ip in self.blocked_ips:
-            if current_time < self.blocked_ips[client_ip]:
-                rate_limit_logger.warning(f"Blocked IP attempted access: {client_ip}")
-                return False
-            else:
-                # Unblock IP
-                del self.blocked_ips[client_ip]
-                if client_ip in self.failed_attempts:
-                    del self.failed_attempts[client_ip]
-        
-        # Clean old entries
-        self.rate_limit_store = {
-            ip: requests for ip, requests in self.rate_limit_store.items()
-            if any(req_time > current_time - RATE_LIMIT_WINDOW for req_time in requests)
-        }
-        
-        # Check current client
-        if client_ip not in self.rate_limit_store:
-            self.rate_limit_store[client_ip] = []
-        
-        # Remove old requests for this client
-        self.rate_limit_store[client_ip] = [
-            req_time for req_time in self.rate_limit_store[client_ip]
-            if req_time > current_time - RATE_LIMIT_WINDOW
-        ]
-        
-        # Check if limit exceeded
-        if len(self.rate_limit_store[client_ip]) >= RATE_LIMIT_REQUESTS:
-            # Track failed attempts
-            self.failed_attempts[client_ip] = self.failed_attempts.get(client_ip, 0) + 1
-            
-            # Block IP after multiple violations
-            if self.failed_attempts[client_ip] >= 3:
-                self.blocked_ips[client_ip] = current_time + 3600  # Block for 1 hour
-                rate_limit_logger.error(f"IP blocked for repeated violations: {client_ip}")
-            
-            rate_limit_logger.warning(f"Rate limit exceeded for IP: {client_ip}")
-            return False
-        
-        # Add current request
-        self.rate_limit_store[client_ip].append(current_time)
-        return True
-    
-    def log_security_event(self, event_type: str, details: Dict[str, Any], client_ip: str = "unknown"):
-        """Log security events with structured data"""
-        event_data = {
-            "timestamp": datetime.utcnow().isoformat(),
-            "event_type": event_type,
-            "client_ip": client_ip,
-            "details": details
-        }
-        security_logger.info(json.dumps(event_data))
-    
-    def get_client_ip(self, request: Request) -> str:
-        """Get client IP address"""
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            return forwarded.split(",")[0].strip()
-        return request.client.host if request.client else "unknown"
+            logger.error(f"Authentication error: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication failed"
+            )
 
 # Global security manager instance
 security_manager = SecurityManager()
 
+# Input Sanitization
+class InputSanitizer:
+    @staticmethod
+    def sanitize_string(input_str: str, max_length: int = 1000) -> str:
+        """Sanitize string input"""
+        if not isinstance(input_str, str):
+            raise ValueError("Input must be a string")
+        
+        # Remove null bytes
+        cleaned = input_str.replace('\x00', '')
+        
+        # Remove control characters except newlines and tabs
+        cleaned = ''.join(char for char in cleaned 
+                         if ord(char) >= 32 or char in '\n\t\r')
+        
+        # Truncate to max length
+        if len(cleaned) > max_length:
+            cleaned = cleaned[:max_length]
+        
+        return cleaned.strip()
+    
+    @staticmethod
+    def sanitize_filename(filename: str) -> str:
+        """Sanitize filename for safe storage"""
+        if not filename:
+            raise ValueError("Filename cannot be empty")
+        
+        # Remove path traversal attempts
+        filename = os.path.basename(filename)
+        
+        # Allow only safe characters
+        safe_chars = set("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-")
+        filename = ''.join(c for c in filename if c in safe_chars)
+        
+        if not filename:
+            raise ValueError("Filename contains no valid characters")
+        
+        # Ensure reasonable length
+        if len(filename) > 255:
+            name, ext = os.path.splitext(filename)
+            filename = name[:250] + ext
+        
+        return filename
+
+# Utility Functions
+def generate_secure_token() -> str:
+    """Generate cryptographically secure token"""
+    return secrets.token_urlsafe(32)
+
+def constant_time_compare(a: str, b: str) -> bool:
+    """Constant time string comparison to prevent timing attacks"""
+    return hmac.compare_digest(a.encode(), b.encode())
+
+def log_security_event(event_type: str, details: Dict[str, Any], client_ip: str = "unknown", user_id: str = None):
+    """Log security events for audit trail"""
+    log_entry = {
+        "timestamp": datetime.utcnow().isoformat(),
+        "event_type": event_type,
+        "client_ip": client_ip,
+        "user_id": user_id,
+        "details": details
+    }
+    
+    logger.warning(f"SECURITY_EVENT: {json.dumps(log_entry)}")
+
+# Security Headers Middleware
+def add_security_headers(response, request: Request):
+    """Add security headers to response"""
+    for header, value in config.SECURITY_HEADERS.items():
+        response.headers[header] = value
+    
+    # Add custom headers based on request
+    if request.url.path.startswith("/api/"):
+        response.headers["X-API-Version"] = "1.0"
+    
+    return response
+
+# Rate Limiting Middleware
 def rate_limit_middleware(request: Request):
-    """Enhanced rate limiting middleware with logging"""
+    """Apply rate limiting based on endpoint and user"""
     client_ip = security_manager.get_client_ip(request)
     
-    if not security_manager.check_rate_limit(client_ip):
-        security_manager.log_security_event(
-            "RATE_LIMIT_EXCEEDED",
-            {"path": str(request.url.path), "method": request.method},
-            client_ip
-        )
-        raise HTTPException(status_code=429, detail="Rate limit exceeded")
-    
-    # Log successful requests (sample 1% to avoid log spam)
-    import random
-    if random.random() < 0.01:
-        security_manager.log_security_event(
-            "REQUEST_ALLOWED",
-            {"path": str(request.url.path), "method": request.method},
-            client_ip
-        )
-
-def hash_password(password: str) -> str:
-    """Hash password using PBKDF2 (secure algorithm)"""
-    import hashlib
-    import os
-    
-    # Generate a random salt
-    salt = os.urandom(32)
-    # Use PBKDF2 with SHA-256
-    pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-    # Return salt + hash as hex
-    return salt.hex() + pwdhash.hex()
-
-def verify_password(password: str, hashed: str) -> bool:
-    """Verify password against PBKDF2 hash"""
-    import hashlib
-    
-    try:
-        # Extract salt (first 64 chars) and hash (remaining)
-        salt = bytes.fromhex(hashed[:64])
-        stored_hash = hashed[64:]
-        
-        # Hash the provided password with the same salt
-        pwdhash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt, 100000)
-        
-        # Compare hashes
-        return hmac.compare_digest(pwdhash.hex(), stored_hash)
-    except (ValueError, IndexError):
-        return False
-
-def get_current_user(token: HTTPAuthorizationCredentials = Depends(security)):
-    try:
-        payload = security_manager.verify_token(token.credentials)
-        user_id = payload.get("user_id")
-        if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
-        return user_id
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    # Check if this is an auth endpoint
+    auth_endpoints = ["/users/login", "/users/register", "/users/refresh"]
+    if request.url.path in auth_endpoints:
+        if auth_rate_limiter.is_locked(client_ip):
+            raise HTTPException(
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                detail="Too many authentication attempts. Please try again later.",
+                headers={"Retry-After": str(config.LOGIN_LOCKOUT_DURATION)}
+            )
