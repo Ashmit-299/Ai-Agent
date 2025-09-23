@@ -91,7 +91,7 @@ class Analytics(SQLModel, table=True, extend_existing=True):
     event_type: str
     user_id: Optional[str] = Field(foreign_key="user.user_id")
     content_id: Optional[str] = Field(foreign_key="content.content_id")
-    metadata: Optional[str] = None  # JSON string
+    event_data: Optional[str] = None  # JSON string
     timestamp: float = Field(default_factory=time.time)
     ip_address: Optional[str] = None
 
