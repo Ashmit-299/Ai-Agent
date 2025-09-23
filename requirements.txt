@@ -26,5 +26,3 @@ alembic
 pytest
 pytest-httpx
 pytest-asyncio
-
-pip install numpy moviepy==1.0.3 imageio-ffmpeg==0.4.9 Pillow
