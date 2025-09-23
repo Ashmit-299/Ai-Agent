@@ -170,16 +170,22 @@ class JWTManager:
                 if claim not in payload:
                     raise JWTError(f"Missing required claim: {claim}")
             
+            # Check if token is blacklisted
+            jti = payload.get("jti")
+            if jti and token_blacklist.is_blacklisted(jti):
+                raise JWTError("Token has been revoked")
+            
             return payload
             
         except jwt.ExpiredSignatureError:
+            logger.warning("JWT token expired")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Token has expired",
                 headers={"WWW-Authenticate": "Bearer"}
             )
         except jwt.JWTError as e:
-            logger.warning(f"Token verification failed: {e}")
+            logger.warning(f"JWT verification failed: {e}")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid token",
@@ -240,6 +246,33 @@ class AuthRateLimiter:
 # Global rate limiter instance
 auth_rate_limiter = AuthRateLimiter()
 
+# Token blacklist for logout functionality
+class TokenBlacklist:
+    def __init__(self):
+        self.blacklisted_tokens = set()
+        self.cleanup_interval = 3600  # 1 hour
+        self.last_cleanup = time.time()
+    
+    def add_token(self, jti: str):
+        """Add token to blacklist"""
+        self.blacklisted_tokens.add(jti)
+        self._cleanup_expired()
+    
+    def is_blacklisted(self, jti: str) -> bool:
+        """Check if token is blacklisted"""
+        self._cleanup_expired()
+        return jti in self.blacklisted_tokens
+    
+    def _cleanup_expired(self):
+        """Remove expired tokens from blacklist"""
+        current_time = time.time()
+        if current_time - self.last_cleanup > self.cleanup_interval:
+            # In production, implement proper cleanup based on token expiry
+            self.last_cleanup = current_time
+
+# Global token blacklist instance
+token_blacklist = TokenBlacklist()
+
 # Security Middleware
 class SecurityManager:
     def __init__(self):
@@ -268,9 +301,11 @@ class SecurityManager:
             # Get authorization header
             credentials: HTTPAuthorizationCredentials = await self.security_bearer(request)
             if not credentials:
+                logger.debug("No credentials provided")
                 return None
             
             if credentials.scheme.lower() != "bearer":
+                logger.warning(f"Invalid auth scheme: {credentials.scheme}")
                 raise HTTPException(
                     status_code=status.HTTP_401_UNAUTHORIZED,
                     detail="Invalid authentication scheme"
@@ -278,6 +313,7 @@ class SecurityManager:
             
             # Verify token
             payload = JWTManager.verify_token(credentials.credentials, "access")
+            logger.debug(f"Token verified for user: {payload.get('sub')}")
             
             return {
                 "user_id": payload.get("user_id"),
@@ -341,6 +377,17 @@ class InputSanitizer:
             filename = name[:250] + ext
         
         return filename
+    
+    @staticmethod
+    def validate_email(email: str) -> bool:
+        """Basic email validation"""
+        if not email or not isinstance(email, str):
+            return False
+        
+        # Basic email pattern check
+        import re
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return bool(re.match(pattern, email)) and len(email) <= 255
 
 # Utility Functions
 def generate_secure_token() -> str:

@@ -41,7 +41,6 @@ class Content(SQLModel, table=True, extend_existing=True):
     views: int = Field(default=0)
     likes: int = Field(default=0)
     shares: int = Field(default=0)
-    status: str = Field(default="active")
 
 class Feedback(SQLModel, table=True, extend_existing=True):
     __tablename__ = "feedback"

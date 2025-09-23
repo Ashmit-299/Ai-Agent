@@ -248,12 +248,13 @@ def create_demo_user():
             try:
                 existing_user = db_manager.get_user_by_username('demo')
                 if not existing_user:
-                    demo_hash = hash_password('demo123')
+                    demo_hash = hash_password('demo1234')
                     demo_user_data = {
                         'user_id': 'demo001',
                         'username': 'demo',
                         'password_hash': demo_hash,
                         'email': 'demo@example.com',
+                        'email_verified': True,
                         'created_at': time.time()
                     }
                     db_manager.create_user(demo_user_data)
@@ -265,9 +266,9 @@ def create_demo_user():
                     cur = temp_conn.cursor()
                     cur.execute('SELECT user_id FROM user WHERE username=?', ('demo',))
                     if not cur.fetchone():
-                        demo_hash = hash_password('demo123')
-                        cur.execute('INSERT INTO user(user_id, username, password_hash, email, created_at) VALUES (?,?,?,?,?)',
-                                   ('demo001', 'demo', demo_hash, 'demo@example.com', time.time()))
+                        demo_hash = hash_password('demo1234')
+                        cur.execute('INSERT INTO user(user_id, username, password_hash, email, email_verified, created_at) VALUES (?,?,?,?,?,?)',
+                                   ('demo001', 'demo', demo_hash, 'demo@example.com', True, time.time()))
                 temp_conn.close()
         else:
             # Fallback to sqlite3
@@ -277,9 +278,9 @@ def create_demo_user():
                 cur = temp_conn.cursor()
                 cur.execute('SELECT user_id FROM user WHERE username=?', ('demo',))
                 if not cur.fetchone():
-                    demo_hash = hash_password('demo123')
-                    cur.execute('INSERT INTO user(user_id, username, password_hash, email, created_at) VALUES (?,?,?,?,?)',
-                               ('demo001', 'demo', demo_hash, 'demo@example.com', time.time()))
+                    demo_hash = hash_password('demo1234')
+                    cur.execute('INSERT INTO user(user_id, username, password_hash, email, email_verified, created_at) VALUES (?,?,?,?,?,?)',
+                               ('demo001', 'demo', demo_hash, 'demo@example.com', True, time.time()))
             temp_conn.close()
     except Exception as e:
         import logging
@@ -315,7 +316,7 @@ def health_check():
 def demo_login():
     """STEP 1B: Get demo credentials for quick testing"""
     return {
-        "demo_credentials": {"username": "demo", "password": "demo123"},
+        "demo_credentials": {"username": "demo", "password": "demo1234"},
         "next_step": "POST /users/login with these credentials to get access token"
     }
 
@@ -441,28 +442,63 @@ def accept_invitation(token: str):
 def list_contents(limit: int = 20, current_user = Depends(get_current_user)):
     """STEP 3A: Browse existing content (authentication optional for personalized results)"""
     try:
+        # Try SQLModel first
         from core.database import DatabaseManager
-        from sqlmodel import Session, select, desc
-        from core.models import Content
-        
         db = DatabaseManager()
-        with Session(db.engine) as session:
-            statement = select(Content).order_by(desc(Content.uploaded_at)).limit(limit)
-            contents = session.exec(statement).all()
         
-        return {
-            'items': [{
-                'content_id': content.content_id,
-                'title': content.title, 
-                'description': content.description,
-                'authenticity_score': content.authenticity_score
-            } for content in contents],
-            'next_step': 'POST /upload to add new content or POST /generate-video to create from script'
-        }
+        try:
+            from sqlmodel import Session, select, desc
+            from core.models import Content
+            
+            with Session(db.engine) as session:
+                statement = select(Content).order_by(desc(Content.uploaded_at)).limit(limit)
+                contents = session.exec(statement).all()
+            
+            return {
+                'items': [{
+                    'content_id': content.content_id,
+                    'title': content.title, 
+                    'description': content.description,
+                    'authenticity_score': content.authenticity_score,
+                    'content_type': content.content_type,
+                    'uploaded_at': content.uploaded_at
+                } for content in contents],
+                'total_count': len(contents),
+                'next_step': 'POST /upload to add new content or POST /generate-video to create from script'
+            }
+        except Exception as sqlmodel_error:
+            # Fallback to SQLite
+            import sqlite3
+            conn = sqlite3.connect('data.db')
+            with conn:
+                cur = conn.cursor()
+                cur.execute('''
+                    SELECT content_id, title, description, authenticity_score, content_type, uploaded_at
+                    FROM content 
+                    ORDER BY uploaded_at DESC 
+                    LIMIT ?
+                ''', (limit,))
+                rows = cur.fetchall()
+            conn.close()
+            
+            return {
+                'items': [{
+                    'content_id': row[0],
+                    'title': row[1], 
+                    'description': row[2],
+                    'authenticity_score': row[3],
+                    'content_type': row[4],
+                    'uploaded_at': row[5]
+                } for row in rows],
+                'total_count': len(rows),
+                'database_mode': 'sqlite_fallback',
+                'next_step': 'POST /upload to add new content or POST /generate-video to create from script'
+            }
+            
     except Exception as e:
         return {
             'items': [],
-            'message': 'No content found or database not initialized',
+            'message': f'Database error: {str(e)}',
             'next_step': 'POST /upload to add new content or POST /generate-video to create from script'
         }
 
@@ -757,7 +793,7 @@ def get_content(content_id: str, request: Request):
     """STEP 4A: Get content details and access URLs (authentication optional for enhanced features)"""
     current_user = None  # For now, make it work without auth
     try:
-        # Get content using Supabase database
+        # Get content using database with fallback
         try:
             from core.database import DatabaseManager
             db = DatabaseManager()
@@ -776,9 +812,22 @@ def get_content(content_id: str, request: Request):
         except HTTPException:
             raise
         except Exception as db_error:
-            import logging
-            logging.error(f"Database query failed: {db_error}")
-            raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_error)}")
+            # Fallback to SQLite
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute('SELECT content_id, title, description, file_path, content_type FROM content WHERE content_id=?', (content_id,))
+                    row = cur.fetchone()
+                conn.close()
+                
+                if not row:
+                    raise HTTPException(status_code=404, detail='Content not found')
+            except Exception as sqlite_error:
+                import logging
+                logging.error(f"Database query failed: {db_error}, SQLite fallback failed: {sqlite_error}")
+                raise HTTPException(status_code=500, detail="Database query failed")
         
         return {
             'content_id': row[0],
@@ -883,7 +932,7 @@ def get_content_metadata(content_id: str, request: Request):
 def download(content_id: str, current_user = Depends(get_current_user)):
     """STEP 4B: Download content file (authentication optional for tracking)"""
     try:
-        # Get content using Supabase database
+        # Get content using database with fallback
         try:
             from core.database import DatabaseManager
             db = DatabaseManager()
@@ -894,9 +943,23 @@ def download(content_id: str, current_user = Depends(get_current_user)):
         except HTTPException:
             raise
         except Exception as db_error:
-            import logging
-            logging.error(f"Database query failed: {db_error}")
-            raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_error)}")
+            # Fallback to SQLite
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute('SELECT file_path FROM content WHERE content_id=?', (content_id,))
+                    result = cur.fetchone()
+                conn.close()
+                
+                if not result:
+                    raise HTTPException(status_code=404, detail='Content not found')
+                file_path = result[0]
+            except Exception as sqlite_error:
+                import logging
+                logging.error(f"Database query failed: {db_error}, SQLite fallback failed: {sqlite_error}")
+                raise HTTPException(status_code=500, detail="Database query failed")
         if not os.path.exists(file_path):
             raise HTTPException(status_code=404, detail='File not found')
         
@@ -916,7 +979,7 @@ def stream_video(content_id: str, request: Request, range_request: Optional[str]
     range_header = request.headers.get('range')
     session_id = streaming_metrics.log_stream_start(content_id, client_ip, range_header)
     
-    # Get content using Supabase database
+    # Get content using database with fallback
     try:
         from core.database import DatabaseManager
         db = DatabaseManager()
@@ -928,10 +991,25 @@ def stream_video(content_id: str, request: Request, range_request: Optional[str]
     except HTTPException:
         raise
     except Exception as db_error:
-        import logging
-        logging.error(f"Database query failed: {db_error}")
-        streaming_metrics.log_stream_end(session_id, 0, 500)
-        raise HTTPException(status_code=500, detail=f"Database query failed: {str(db_error)}")
+        # Fallback to SQLite
+        try:
+            import sqlite3
+            conn = sqlite3.connect('data.db')
+            with conn:
+                cur = conn.cursor()
+                cur.execute('SELECT file_path FROM content WHERE content_id=?', (content_id,))
+                result = cur.fetchone()
+            conn.close()
+            
+            if not result:
+                streaming_metrics.log_stream_end(session_id, 0, 404)
+                raise HTTPException(status_code=404, detail='Content not found')
+            file_path = result[0]
+        except Exception as sqlite_error:
+            import logging
+            logging.error(f"Database query failed: {db_error}, SQLite fallback failed: {sqlite_error}")
+            streaming_metrics.log_stream_end(session_id, 0, 500)
+            raise HTTPException(status_code=500, detail="Database query failed")
     if not os.path.exists(file_path):
         streaming_metrics.log_stream_end(session_id, 0, 404)
         raise HTTPException(status_code=404, detail='File not found')

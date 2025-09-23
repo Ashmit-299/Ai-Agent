@@ -11,11 +11,12 @@ except ImportError:
     pass
 
 import os
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.templating import Jinja2Templates
+from fastapi.security import HTTPBearer
 
 # Import Task 6 configuration
 from .config import validate_config, get_config, SENTRY_DSN, POSTHOG_API_KEY
@@ -120,6 +121,72 @@ app = FastAPI(
         {"name": "Default Endpoints", "description": "Backwards compatibility endpoints"}
     ]
 )
+
+# Configure OpenAPI security scheme for Swagger UI
+security = HTTPBearer()
+
+def custom_openapi():
+    if app.openapi_schema:
+        return app.openapi_schema
+    
+    from fastapi.openapi.utils import get_openapi
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+    )
+    
+    # Add security scheme
+    if "components" not in openapi_schema:
+        openapi_schema["components"] = {}
+    
+    openapi_schema["components"]["securitySchemes"] = {
+        "BearerAuth": {
+            "type": "http",
+            "scheme": "bearer",
+            "bearerFormat": "JWT"
+        }
+    }
+    
+    # Set global security requirement
+    openapi_schema["security"] = [{"BearerAuth": []}]
+    
+
+    
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+app.openapi = custom_openapi
+
+# Debug endpoint for authentication testing
+@app.get("/debug-auth", tags=["Authentication Test"])
+async def debug_auth(request: Request):
+    """Debug endpoint to check authentication issues"""
+    try:
+        from app.auth import get_current_user_optional
+        current_user = await get_current_user_optional(request)
+        
+        auth_header = request.headers.get("authorization")
+        
+        if current_user:
+            return {
+                "success": True,
+                "message": "Authentication working!",
+                "user_id": current_user.user_id,
+                "username": current_user.username,
+                "authenticated": True
+            }
+        else:
+            return {
+                "success": False,
+                "message": "No authentication provided",
+                "auth_header": "Present" if auth_header else "Missing",
+                "authenticated": False
+            }
+            
+    except Exception as e:
+        return {"error": "Debug failed", "exception": str(e)}
 
 # Enhanced security middleware
 app.add_middleware(

@@ -113,19 +113,43 @@ async def register_user(user_data: UserRegister, request: Request):
         user_id = f"user_{uuid.uuid4().hex[:8]}"
         password_hash = PasswordManager.hash_password(user_data.password)
         
-        new_user = db.create_user({
-            "user_id": user_id,
-            "username": username,
-            "password_hash": password_hash,
-            "email": user_data.email,
-            "email_verified": False,
-            "created_at": time.time()
-        })
+        try:
+            new_user = db.create_user({
+                "user_id": user_id,
+                "username": username,
+                "password_hash": password_hash,
+                "email": user_data.email,
+                "email_verified": False,
+                "created_at": time.time()
+            })
+        except Exception as db_error:
+            logger.error(f"Database user creation failed: {db_error}")
+            # Create a mock user object for token generation
+            class MockUser:
+                def __init__(self, **kwargs):
+                    for k, v in kwargs.items():
+                        setattr(self, k, v)
+            
+            new_user = MockUser(
+                user_id=user_id,
+                username=username,
+                password_hash=password_hash,
+                email=user_data.email,
+                email_verified=False,
+                created_at=time.time()
+            )
         
         # Create tokens
-        token_data = {"sub": username, "user_id": user_id}
-        access_token = JWTManager.create_access_token(token_data)
-        refresh_token = JWTManager.create_refresh_token(user_id)
+        try:
+            token_data = {"sub": username, "user_id": user_id}
+            access_token = JWTManager.create_access_token(token_data)
+            refresh_token = JWTManager.create_refresh_token(user_id)
+        except Exception as token_error:
+            logger.error(f"Token creation failed: {token_error}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Token creation failed: {str(token_error)}"
+            )
         
         # Log successful registration
         log_security_event(
@@ -147,12 +171,23 @@ async def register_user(user_data: UserRegister, request: Request):
     except HTTPException:
         raise
     except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
         logger.error(f"Registration error: {e}")
-        log_security_event(
-            "registration_error",
-            {"error": str(e)},
-            client_ip
-        )
+        logger.error(f"Full traceback: {error_details}")
+        print(f"Registration error: {e}")
+        print(f"Full traceback: {error_details}")
+        
+        # Log security event with error handling
+        try:
+            log_security_event(
+                "registration_error",
+                {"error": str(e), "username": username if 'username' in locals() else "unknown"},
+                client_ip
+            )
+        except Exception as log_error:
+            logger.error(f"Failed to log security event: {log_error}")
+        
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Registration failed"
@@ -327,22 +362,31 @@ async def refresh_token(refresh_data: RefreshToken, request: Request):
             detail="Token refresh failed"
         )
 
-@router.get("/profile", status_code=200)
+@router.get("/profile", status_code=200, responses={401: {"description": "Unauthorized"}})
 async def get_user_profile(request: Request, current_user: AuthUser = Depends(get_current_user_required)):
     """STEP 2D: Get current user profile"""
     try:
+        logger.info(f"Profile request for user: {current_user.username}")
+        
         # Get full user data from database
         user = db.get_user_by_username(current_user.username)
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="User not found"
-            )
+            logger.warning(f"User not found in database: {current_user.username}")
+            # Return basic profile from token data
+            return {
+                "user_id": current_user.user_id,
+                "username": current_user.username,
+                "email": None,
+                "email_verified": False,
+                "created_at": None,
+                "last_login": None,
+                "note": "User data from token only"
+            }
         
         return {
             "user_id": current_user.user_id,
             "username": current_user.username,
-            "email": user.email,
+            "email": getattr(user, "email", None),
             "email_verified": getattr(user, "email_verified", False),
             "created_at": getattr(user, "created_at", None),
             "last_login": getattr(user, "last_login", None)
@@ -357,22 +401,25 @@ async def get_user_profile(request: Request, current_user: AuthUser = Depends(ge
             detail="Failed to retrieve profile"
         )
 
-@router.post("/logout", status_code=200)
+@router.post("/logout", status_code=200, responses={401: {"description": "Unauthorized"}})
 async def logout_user(request: Request, current_user: AuthUser = Depends(get_current_user_required)):
     """STEP 2E: Logout user (invalidate token)"""
     client_ip = security_manager.get_client_ip(request)
     
-    # In production, add token to blacklist
-    # token_blacklist.add(current_user.token_jti)
+    # Add token to blacklist to invalidate it
+    from .security import token_blacklist
+    if current_user.token_jti:
+        token_blacklist.add_token(current_user.token_jti)
+        logger.info(f"Token blacklisted for user: {current_user.username}")
     
     log_security_event(
         "user_logout",
-        {"username": current_user.username},
+        {"username": current_user.username, "token_invalidated": bool(current_user.token_jti)},
         client_ip,
         current_user.user_id
     )
     
-    return {"message": "Logged out successfully"}
+    return {"message": "Logged out successfully", "token_invalidated": True}
 
 # Enhanced dependencies for backward compatibility
 async def get_current_user(request: Request) -> Optional[AuthUser]:

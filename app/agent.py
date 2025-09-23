@@ -274,7 +274,7 @@ class RLAgent:
             import sqlite3
             conn = sqlite3.connect('data.db')
             cur = conn.cursor()
-            cur.execute('SELECT COUNT(*) FROM contents')
+            cur.execute('SELECT COUNT(*) FROM content')
             db_content_count = cur.fetchone()[0]
             cur.execute('SELECT COUNT(*) FROM feedback')
             db_feedback_count = cur.fetchone()[0]
@@ -301,7 +301,7 @@ class RLAgent:
             import sqlite3
             conn = sqlite3.connect('data.db')
             cur = conn.cursor()
-            cur.execute('SELECT content_id, current_tags, authenticity_score FROM contents')
+            cur.execute('SELECT content_id, current_tags, authenticity_score FROM content')
             rows = cur.fetchall()
             conn.close()
             
