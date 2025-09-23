@@ -1,0 +1,1 @@
+This is a test script for video generation.\nSecond line of the script.\nThird line with more content.

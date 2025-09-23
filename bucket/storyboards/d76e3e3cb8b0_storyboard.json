@@ -1,0 +1,43 @@
+{
+  "content_id": "d76e3e3cb8b0",
+  "script_id": "script_fd6d44675e28",
+  "title": "fw",
+  "scenes": [
+    {
+      "scene_id": "scene_0",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Hello!",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_1",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "I am Ashmit Pandey working in Blackhole Infiverse as an AIML Intern.",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_2",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Thank you......",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    }
+  ],
+  "total_duration": 6.0,
+  "generation_method": "simple_text",
+  "created_at": 1758397892.7256477
+}

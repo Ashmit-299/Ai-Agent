@@ -19,56 +19,48 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
-MANIFEST
 
 # Virtual Environment
 venv/
 env/
 ENV/
-.venv/
-.env/
 
 # Database
 *.db
-*.sqlite
-*.sqlite3
-data.db
+*.db-shm
+*.db-wal
+data.db*
 
 # Logs
 logs/
 *.log
 
-# Uploads and Generated Content
-uploads/
-bucket/
-generated/
-tmp/
-temp/
+# Environment variables
+.env
 
 # IDE
 .vscode/
 .idea/
 *.swp
 *.swo
-*~
 
 # OS
 .DS_Store
 Thumbs.db
-*.tmp
-
-# Config files with secrets
-.env
-config.ini
-secrets.json
-
-# Agent state
-agent_state.json
-
-# Test output files (but keep test scripts)
-test_output.txt
-test_results.json
 
 # Temporary files
-*.bak
-*.backup
+tmp/
+temp/
+*.tmp
+
+# Generated content
+bucket/videos/*.mp4
+bucket/tmp/*
+uploads/*
+
+# Agent state
+agent_state.json.bak
+
+# Reports
+reports/failed_operations/*
+reports/failed_storyboards/*

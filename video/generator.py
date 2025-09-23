@@ -244,10 +244,27 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     except ImportError:
         raise ImportError("moviepy and PIL are required: pip install moviepy==1.0.3 Pillow")
 
-    # Split text by newlines - each line becomes one frame
-    lines = [line.strip() for line in text.split('\n') if line.strip()]
-    if not lines:
-        lines = ["No content"]
+    # Split text by sentences - each sentence becomes one frame
+    sentences = []
+    for line in text.split('\n'):
+        line = line.strip()
+        if line:
+            # Split by sentence endings but preserve punctuation
+            line_sentences = re.split(r'([.!?]+)', line)
+            combined_sentences = []
+            for i in range(0, len(line_sentences)-1, 2):
+                sentence = line_sentences[i].strip()
+                punct = line_sentences[i+1] if i+1 < len(line_sentences) else ''
+                if sentence:
+                    combined_sentences.append(sentence + punct)
+            line_sentences = combined_sentences
+            for sentence in line_sentences:
+                sentence = sentence.strip()
+                if sentence.strip():
+                    sentences.append(sentence)
+    
+    if not sentences:
+        sentences = ["No content"]
 
     clips = []
     
@@ -265,7 +282,7 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     
     max_width = 1600  # Leave margins
     
-    for line in lines:
+    for sentence in sentences:
         # Create background clip
         bg_clip = ColorClip(size=(1920, 1080), color=(0, 0, 0), duration=frame_duration)
         
@@ -273,16 +290,16 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         img = Image.new('RGBA', (1920, 1080), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
         
-        # Check if line fits on single line
-        bbox = draw.textbbox((0, 0), line, font=font)
+        # Check if sentence fits on single line
+        bbox = draw.textbbox((0, 0), sentence, font=font)
         text_width = bbox[2] - bbox[0]
         
         if text_width <= max_width:
             # Single line
-            display_text = line
+            display_text = sentence
         else:
             # Wrap text properly - fill both lines completely
-            words = line.split()
+            words = sentence.split()
             line1 = ""
             line2 = ""
             
@@ -312,7 +329,12 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
         x = (1920 - text_width) // 2
         y = (1080 - text_height) // 2
         
-        # Draw text with special characters support
+        # Draw bold text with special characters support
+        # Create bold effect by drawing text multiple times with slight offsets
+        for dx in [-2, -1, 0, 1, 2]:
+            for dy in [-2, -1, 0, 1, 2]:
+                draw.multiline_text((x+dx, y+dy), display_text, font=font, fill=(255, 255, 255, 255), align='center')
+        # Draw main text on top for extra boldness
         draw.multiline_text((x, y), display_text, font=font, fill=(255, 255, 255, 255), align='center')
         
         # Convert PIL image to numpy array

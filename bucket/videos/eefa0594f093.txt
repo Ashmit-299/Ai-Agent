@@ -1,0 +1,12 @@
+Video Script: Title: Basic Statistics Example
+
+An example of calculating mean and median:
+Suppose we have the numbers 2, 3, 3, 5, 7, 10.
+The mean is the average value.
+The median is the middle value in a sorted list.
+Definition: Mean is calculated as the sum divided by count.
+Definition: Median is the middle value after sorting.
+Summary: Understanding mean and median helps interpret data distribution.
+
+
+Video generation failed: No module named 'moviepy.editor'

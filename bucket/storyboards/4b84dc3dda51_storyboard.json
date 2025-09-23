@@ -1,0 +1,87 @@
+{
+  "content_id": "4b84dc3dda51",
+  "script_id": "script_ff230ab2249d",
+  "title": "reg",
+  "scenes": [
+    {
+      "scene_id": "scene_0",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Title: Introduction to Linear Regression",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_1",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Welcome to this short lesson on linear regression.",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_2",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "In this video, we'll cover:",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_3",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "1) What is linear regression?",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_4",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "2) The simple linear model y = mx + b.",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_5",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "3) How loss is measured with mean squared error.",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    },
+    {
+      "scene_id": "scene_6",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Thank you for watching — try implementing a simple regression now!",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    }
+  ],
+  "total_duration": 14.0,
+  "generation_method": "simple_text",
+  "created_at": 1758361408.8491192
+}
