@@ -10,6 +10,21 @@ jobs:
   test:
     runs-on: ubuntu-latest
     
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_USER: test_user
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+    
     steps:
     - uses: actions/checkout@v4
     
@@ -22,9 +37,28 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-asyncio
+        pip install pytest pytest-asyncio alembic
+    
+    - name: Test migrations on PostgreSQL
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
+      run: |
+        # Test migration system
+        python run_migrations.py upgrade
+        python -c "
+import sys
+sys.path.append('.')
+from core.models import engine
+from sqlalchemy import text
+conn = engine.connect()
+result = conn.execute(text('SELECT 1'))
+print('Migration test successful - Database connected')
+conn.close()
+"
     
     - name: Run tests
+      env:
+        DATABASE_URL: postgresql://test_user:test_password@localhost:5432/test_db
       run: |
         python -m pytest tests/ -v --tb=short -p no:asyncio || echo "Tests completed"
     
@@ -66,7 +100,11 @@ jobs:
     if: github.ref == 'refs/heads/main'
     
     steps:
-    - name: Deploy to production
+    - name: Deploy to production with migrations
       run: |
-        echo "Deployment step - configure with your deployment target"
+        echo "🚀 Deployment step - configure with your deployment target"
         echo "Image: ashmitpandey299/ai-uploader-agent:${{ github.sha }}"
+        echo "📋 Post-deployment steps needed:"
+        echo "1. Run database migrations: python run_migrations.py upgrade"
+        echo "2. Verify health endpoint: curl https://your-app.com/health"
+        echo "3. Run smoke tests"
