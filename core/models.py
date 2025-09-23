@@ -133,9 +133,9 @@ def create_db_and_tables():
     """Create database tables - Use only for development"""
     try:
         SQLModel.metadata.create_all(engine)
-        print("✅ Tables created successfully")
+        print("Tables created successfully")
     except Exception as e:
-        print(f"❌ Table creation failed: {e}")
+        print(f"Table creation failed: {e}")
 
 def get_session():
     """Get database session"""

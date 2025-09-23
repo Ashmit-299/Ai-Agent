@@ -236,7 +236,12 @@ def simple_test():
 
 # Create demo user if not exists
 def create_demo_user():
-    from .security import hash_password
+    try:
+        from .security import PasswordManager
+        hash_password = PasswordManager.hash_password
+    except ImportError:
+        # Fallback to auth module
+        from .auth import hash_password
     try:
         if SQLMODEL_AVAILABLE and db_manager:
             # Use SQLModel
