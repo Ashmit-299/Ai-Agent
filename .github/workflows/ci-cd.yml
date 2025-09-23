@@ -26,7 +26,7 @@ jobs:
     
     - name: Run tests
       run: |
-        python -m pytest tests/ -v --tb=short -p no:asyncio || echo "Tests completed with exit code $?"
+        python -m pytest tests/ -v --tb=short -p no:asyncio || echo "Tests completed"
     
     - name: Run specific component tests
       run: |
@@ -48,7 +48,6 @@ jobs:
       with:
         username: ashmitpandey299
         password: ${{ secrets.DOCKER_PASSWORD }}
-      if: ${{ secrets.DOCKER_PASSWORD }}
     
     - name: Build and push Docker image
       uses: docker/build-push-action@v5
@@ -60,7 +59,6 @@ jobs:
           ashmitpandey299/ai-uploader-agent:${{ github.sha }}
         cache-from: type=gha
         cache-to: type=gha,mode=max
-      if: ${{ secrets.DOCKER_PASSWORD }}
 
   deploy:
     needs: build
