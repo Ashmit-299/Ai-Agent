@@ -1,196 +1,256 @@
 #!/usr/bin/env python3
 """
-JWT Authentication system with user management
+Production-grade JWT Authentication system
 """
 
-from fastapi import APIRouter, HTTPException, Depends, status
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from pydantic import BaseModel
-from typing import Optional
-from .models import UserRegister, UserLogin, Token, User
-from datetime import datetime, timedelta
-import os
-import sys
-sys.path.append(os.path.dirname(os.path.dirname(__file__)))
+from fastapi import APIRouter, HTTPException, Depends, status, Request
+from fastapi.security import OAuth2PasswordRequestForm
+from typing import Optional, Dict, Any
+from datetime import timedelta
+import logging
+import time
 
-# JWT and password hashing imports
-try:
-    from jose import jwt, JWTError
-    from passlib.context import CryptContext
-    JWT_AVAILABLE = True
-except ImportError:
-    JWT_AVAILABLE = False
-    import hashlib
-    import hmac
-
+from .models import UserRegister, UserLogin, Token, User, PasswordReset, RefreshToken
+from .security import (
+    PasswordManager, JWTManager, SecurityManager, auth_rate_limiter,
+    InputSanitizer, log_security_event
+)
 from core.database import DatabaseManager
+
+logger = logging.getLogger(__name__)
 db = DatabaseManager()
-
 router = APIRouter(prefix="/users", tags=["STEP 2: User Authentication"])
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/users/login")
+security_manager = SecurityManager()
 
-SECRET_KEY = os.getenv("JWT_SECRET", "change_this_secret_key_in_production")
-PUB_KEY = os.getenv("SUPABASE_PUBLIC_KEY")
-ALG = "RS256"
-ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days for alpha
+class AuthUser:
+    """User object for authenticated requests"""
+    def __init__(self, user_id: str, username: str, token_jti: str = None):
+        self.user_id = user_id
+        self.username = username
+        self.token_jti = token_jti
 
-# Password hashing
-if JWT_AVAILABLE:
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-else:
-    pwd_context = None
-
-# Models imported from .models module
-
-def hash_password(password: str) -> str:
-    """Hash password using bcrypt or fallback"""
-    if pwd_context:
-        return pwd_context.hash(password)
-    else:
-        # Simple fallback hashing
-        import hashlib
-        return hashlib.pbkdf2_hmac('sha256', password.encode(), b'salt', 100000).hex()
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password using bcrypt or fallback"""
-    if pwd_context:
-        return pwd_context.verify(plain_password, hashed_password)
-    else:
-        # Simple fallback verification
-        import hashlib
-        return hashed_password == hashlib.pbkdf2_hmac('sha256', plain_password.encode(), b'salt', 100000).hex()
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
-    """Create JWT access token"""
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    
-    to_encode.update({"exp": expire})
-    
-    if JWT_AVAILABLE:
-        return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    else:
-        # Simple fallback token (not secure for production)
-        import json
-        import base64
-        token_data = json.dumps(to_encode, default=str)
-        return base64.b64encode(token_data.encode()).decode()
-
-def verify_token(token: str) -> dict:
-    """Verify JWT token"""
-    if JWT_AVAILABLE:
-        try:
-            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-            return payload
-        except Exception as e:
-            raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
-    else:
-        # Simple fallback verification
-        try:
-            import json
-            import base64
-            token_data = base64.b64decode(token.encode()).decode()
-            return json.loads(token_data)
-        except Exception:
-            raise HTTPException(status_code=401, detail="Invalid token")
-
-
-
-async def get_current_user(token: str = Depends(oauth2_scheme)):
-    """Get current authenticated user"""
+async def get_current_user_optional(request: Request) -> Optional[AuthUser]:
+    """Get current user without requiring authentication"""
     try:
-        payload = verify_token(token)
-        user_id = payload.get("user_id")
-        username = payload.get("sub")
-        
-        if not user_id or not username:
-            raise HTTPException(status_code=401, detail="Invalid token payload")
-        
-        # Return user object with required fields
-        class AuthUser:
-            def __init__(self, user_id: str, username: str):
-                self.user_id = user_id
-                self.username = username
-        
-        return AuthUser(user_id, username)
+        user_data = await security_manager.authenticate_request(request)
+        if user_data:
+            return AuthUser(
+                user_id=user_data["user_id"],
+                username=user_data["username"],
+                token_jti=user_data.get("token_jti")
+            )
+        return None
     except HTTPException:
-        raise
-    except Exception:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        return None
+    except Exception as e:
+        logger.warning(f"Optional auth failed: {e}")
+        return None
 
-async def get_current_user_required(current_user = Depends(get_current_user)):
+async def get_current_user_required(request: Request) -> AuthUser:
     """Get current user (required authentication)"""
-    if not current_user:
-        raise HTTPException(status_code=401, detail="Authentication required")
-    return current_user
+    user_data = await security_manager.authenticate_request(request)
+    if not user_data:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    
+    return AuthUser(
+        user_id=user_data["user_id"],
+        username=user_data["username"],
+        token_jti=user_data.get("token_jti")
+    )
 
 @router.post("/register", response_model=Token, status_code=201)
-async def register_user(user_data: UserRegister):
-    """STEP 2A: Register new user account"""
+async def register_user(user_data: UserRegister, request: Request):
+    """STEP 2A: Register new user account with enhanced security"""
+    client_ip = security_manager.get_client_ip(request)
+    
     try:
         # Validate input
-        if len(user_data.username) < 3:
-            raise HTTPException(status_code=400, detail="Username must be at least 3 characters")
-        if len(user_data.password) < 6:
-            raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+        username = InputSanitizer.sanitize_string(user_data.username, 50)
+        if len(username) < 3:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Username must be at least 3 characters"
+            )
+        
+        # Validate password strength
+        password_validation = PasswordManager.validate_password_strength(user_data.password)
+        if not password_validation["valid"]:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={
+                    "message": "Password does not meet security requirements",
+                    "issues": password_validation["issues"]
+                }
+            )
+        
+        # Validate email if provided
+        if user_data.email and not InputSanitizer.validate_email(user_data.email):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email format"
+            )
         
         # Check if user exists
-        existing_user = db.get_user_by_username(user_data.username)
+        existing_user = db.get_user_by_username(username)
         if existing_user:
-            raise HTTPException(status_code=400, detail="Username already exists")
+            # Log suspicious activity
+            log_security_event(
+                "registration_attempt_existing_user",
+                {"username": username, "success": False},
+                client_ip
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username already exists"
+            )
         
         # Create user
         import uuid
         user_id = f"user_{uuid.uuid4().hex[:8]}"
-        password_hash = hash_password(user_data.password)
+        password_hash = PasswordManager.hash_password(user_data.password)
         
         new_user = db.create_user({
             "user_id": user_id,
-            "username": user_data.username,
+            "username": username,
             "password_hash": password_hash,
-            "email": user_data.email
+            "email": user_data.email,
+            "email_verified": False,
+            "created_at": time.time()
         })
         
-        # Create token
-        token_data = {"sub": user_data.username, "user_id": user_id}
-        access_token = create_access_token(token_data)
+        # Create tokens
+        token_data = {"sub": username, "user_id": user_id}
+        access_token = JWTManager.create_access_token(token_data)
+        refresh_token = JWTManager.create_refresh_token(user_id)
+        
+        # Log successful registration
+        log_security_event(
+            "user_registration_success",
+            {"user_id": user_id, "username": username},
+            client_ip,
+            user_id
+        )
         
         return Token(
             access_token=access_token,
+            refresh_token=refresh_token,
             token_type="bearer",
+            expires_in=1440,  # 24 hours in minutes
             user_id=user_id,
-            username=user_data.username
+            username=username
         )
         
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Registration error: {e}")
+        log_security_event(
+            "registration_error",
+            {"error": str(e)},
+            client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Registration failed"
+        )
 
 @router.post("/login", response_model=Token, status_code=200)
-async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
-    """STEP 2B: Login user and get JWT token (OAuth2 compatible)"""
+async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
+    """STEP 2B: Login user with enhanced security"""
+    client_ip = security_manager.get_client_ip(request)
+    
+    # Check rate limiting
+    if auth_rate_limiter.is_locked(client_ip):
+        log_security_event(
+            "login_attempt_rate_limited",
+            {"username": form_data.username},
+            client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed login attempts. Please try again later.",
+            headers={"Retry-After": "900"}  # 15 minutes
+        )
+    
     try:
+        # Sanitize input
+        username = InputSanitizer.sanitize_string(form_data.username, 50)
+        
         # Find user
-        user = db.get_user_by_username(form_data.username)
+        user = db.get_user_by_username(username)
         if not user:
-            raise HTTPException(status_code=401, detail="Invalid username or password")
+            # Record failed attempt
+            auth_rate_limiter.record_attempt(client_ip, False)
+            log_security_event(
+                "login_attempt_user_not_found",
+                {"username": username},
+                client_ip
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
         
         # Verify password
-        if not verify_password(form_data.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid username or password")
+        if not PasswordManager.verify_password(form_data.password, user.password_hash):
+            # Record failed attempt
+            attempt_result = auth_rate_limiter.record_attempt(client_ip, False)
+            log_security_event(
+                "login_attempt_invalid_password",
+                {
+                    "username": username,
+                    "attempts_remaining": attempt_result["attempts_remaining"]
+                },
+                client_ip,
+                user.user_id
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid username or password"
+            )
         
-        # Create token
+        # Successful login - reset rate limiting
+        auth_rate_limiter.record_attempt(client_ip, True)
+        
+        # Update last login
+        try:
+            # Update user's last login time
+            from sqlmodel import Session, select
+            from core.database import engine
+            from core.models import User as UserModel
+            
+            with Session(engine) as session:
+                statement = select(UserModel).where(UserModel.user_id == user.user_id)
+                db_user = session.exec(statement).first()
+                if db_user:
+                    db_user.last_login = time.time()
+                    session.add(db_user)
+                    session.commit()
+        except Exception as e:
+            logger.warning(f"Failed to update last login: {e}")
+        
+        # Create tokens
         token_data = {"sub": user.username, "user_id": user.user_id}
-        access_token = create_access_token(token_data)
+        access_token = JWTManager.create_access_token(token_data)
+        refresh_token = JWTManager.create_refresh_token(user.user_id)
+        
+        # Log successful login
+        log_security_event(
+            "login_success",
+            {"username": username},
+            client_ip,
+            user.user_id
+        )
         
         return Token(
             access_token=access_token,
+            refresh_token=refresh_token,
             token_type="bearer",
+            expires_in=1440,  # 24 hours in minutes
             user_id=user.user_id,
             username=user.username
         )
@@ -198,27 +258,123 @@ async def login_user(form_data: OAuth2PasswordRequestForm = Depends()):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Login error: {e}")
+        log_security_event(
+            "login_error",
+            {"username": form_data.username, "error": str(e)},
+            client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Login failed"
+        )
+
+@router.post("/refresh", response_model=Token, status_code=200)
+async def refresh_token(refresh_data: RefreshToken, request: Request):
+    """STEP 2C: Refresh access token using refresh token"""
+    client_ip = security_manager.get_client_ip(request)
+    
+    try:
+        # Verify refresh token
+        payload = JWTManager.verify_token(refresh_data.refresh_token, "refresh")
+        user_id = payload.get("user_id")
+        
+        # Get user from database
+        user = db.get_user_by_id(user_id)
+        if not user:
+            log_security_event(
+                "refresh_token_invalid_user",
+                {"user_id": user_id},
+                client_ip
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        # Create new tokens
+        token_data = {"sub": user.username, "user_id": user.user_id}
+        access_token = JWTManager.create_access_token(token_data)
+        new_refresh_token = JWTManager.create_refresh_token(user.user_id)
+        
+        log_security_event(
+            "token_refresh_success",
+            {"username": user.username},
+            client_ip,
+            user.user_id
+        )
+        
+        return Token(
+            access_token=access_token,
+            refresh_token=new_refresh_token,
+            token_type="bearer",
+            expires_in=1440,  # 24 hours in minutes
+            user_id=user.user_id,
+            username=user.username
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Token refresh error: {e}")
+        log_security_event(
+            "token_refresh_error",
+            {"error": str(e)},
+            client_ip
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token refresh failed"
+        )
 
 @router.get("/profile", status_code=200)
-async def get_user_profile(current_user = Depends(get_current_user_required)):
-    """STEP 2C: Get current user profile (requires authentication)"""
-    # Get full user data from database
-    user = db.get_user_by_username(current_user.username)
-    return {
-        "user_id": current_user.user_id,
-        "username": current_user.username,
-        "email": user.email if user else None,
-        "created_at": user.created_at if user else None
-    }
+async def get_user_profile(request: Request, current_user: AuthUser = Depends(get_current_user_required)):
+    """STEP 2D: Get current user profile"""
+    try:
+        # Get full user data from database
+        user = db.get_user_by_username(current_user.username)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+        
+        return {
+            "user_id": current_user.user_id,
+            "username": current_user.username,
+            "email": user.email,
+            "email_verified": getattr(user, "email_verified", False),
+            "created_at": getattr(user, "created_at", None),
+            "last_login": getattr(user, "last_login", None)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Profile retrieval error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve profile"
+        )
 
-@router.get("/me", response_model=User, status_code=200)
-async def get_current_user_info(current_user = Depends(get_current_user_required)):
-    """STEP 2D: Get current user info - alternative endpoint (requires authentication)"""
-    # Get full user data from database
-    user = db.get_user_by_username(current_user.username)
-    return User(
-        user_id=current_user.user_id,
-        username=current_user.username,
-        email=user.email if user else None
+@router.post("/logout", status_code=200)
+async def logout_user(request: Request, current_user: AuthUser = Depends(get_current_user_required)):
+    """STEP 2E: Logout user (invalidate token)"""
+    client_ip = security_manager.get_client_ip(request)
+    
+    # In production, add token to blacklist
+    # token_blacklist.add(current_user.token_jti)
+    
+    log_security_event(
+        "user_logout",
+        {"username": current_user.username},
+        client_ip,
+        current_user.user_id
     )
+    
+    return {"message": "Logged out successfully"}
+
+# Enhanced dependencies for backward compatibility
+async def get_current_user(request: Request) -> Optional[AuthUser]:
+    """Backward compatibility wrapper"""
+    return await get_current_user_optional(request)

@@ -16,9 +16,17 @@ class UserLogin(BaseModel):
 
 class Token(BaseModel):
     access_token: str
+    refresh_token: Optional[str] = None
     token_type: str
+    expires_in: int = 1440  # minutes
     user_id: str
     username: str
+
+class RefreshToken(BaseModel):
+    refresh_token: str
+
+class PasswordReset(BaseModel):
+    email: str = Field(..., max_length=255)
 
 class User(BaseModel):
     user_id: str
