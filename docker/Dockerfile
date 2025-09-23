@@ -22,9 +22,6 @@ COPY . .
 # Create necessary directories
 RUN mkdir -p uploads logs bucket/{scripts,storyboards,videos,logs,ratings,tmp,uploads}
 
-# Set permissions
-RUN chmod +x deployment/deploy.sh
-
 # Expose port
 EXPOSE 8000
 
