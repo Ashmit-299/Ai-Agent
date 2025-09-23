@@ -16,9 +16,9 @@ class UserLogin(BaseModel):
 
 class Token(BaseModel):
     access_token: str
-    refresh_token: Optional[str] = None
+    refresh_token: str
     token_type: str
-    expires_in: int = 1440  # minutes
+    expires_in: int  # minutes
     user_id: str
     username: str
 
@@ -27,6 +27,13 @@ class RefreshToken(BaseModel):
 
 class PasswordReset(BaseModel):
     email: str = Field(..., max_length=255)
+
+class PasswordChange(BaseModel):
+    current_password: str = Field(..., min_length=6)
+    new_password: str = Field(..., min_length=8)
+
+class EmailVerification(BaseModel):
+    token: str = Field(..., min_length=1)
 
 class User(BaseModel):
     user_id: str
