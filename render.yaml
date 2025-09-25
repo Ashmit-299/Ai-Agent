@@ -23,3 +23,13 @@ services:
         value: https://api.perplexity.ai
       - key: BHIV_STORAGE_BACKEND
         value: local
+      - key: ENVIRONMENT
+        value: production
+      - key: POSTHOG_HOST
+        value: https://us.posthog.com
+      - key: ENABLE_PERFORMANCE_MONITORING
+        value: true
+      - key: ENABLE_USER_ANALYTICS
+        value: true
+      - key: ENABLE_ERROR_REPORTING
+        value: true
