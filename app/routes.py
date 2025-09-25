@@ -1870,12 +1870,15 @@ def metrics(current_user = Depends(get_current_user)):
             from core.database import DatabaseManager
             db = DatabaseManager()
             analytics_data = db.get_analytics_data()
-            total_contents = analytics_data['total_content']
-            total_feedback = analytics_data['total_feedback']
-            total_users = analytics_data['total_users']
+            print(f"DEBUG: Analytics data = {analytics_data}")
+            total_contents = analytics_data.get('total_content', 0)
+            total_feedback = analytics_data.get('total_feedback', 0)
+            total_users = analytics_data.get('total_users', 0)
+            print(f"DEBUG: Parsed values - Users: {total_users}, Content: {total_contents}, Feedback: {total_feedback}")
         except Exception as db_error:
             import logging
             logging.error(f"Analytics query failed: {db_error}")
+            print(f"DEBUG: Database error - {db_error}")
             total_contents = total_feedback = total_users = 0
         
         # Get RL agent metrics
