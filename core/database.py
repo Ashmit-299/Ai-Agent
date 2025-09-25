@@ -360,28 +360,54 @@ class DatabaseManager:
     
     @staticmethod
     def get_analytics_data() -> dict:
-        with Session(engine) as session:
+        # Use raw SQL queries to avoid SQLModel column issues
+        if 'postgresql' in DATABASE_URL:
             try:
-                total_users = len(session.exec(select(User)).all())
-                total_content = len(session.exec(select(Content)).all())
-                total_feedback = len(session.exec(select(Feedback)).all())
+                import psycopg2
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
                 
-                # Try to get scripts count, handle if table doesn't exist
+                # Get user count
+                cur.execute('SELECT COUNT(*) FROM "user"')
+                total_users = cur.fetchone()[0]
+                
+                # Get content count
+                cur.execute('SELECT COUNT(*) FROM content')
+                total_content = cur.fetchone()[0]
+                
+                # Get feedback count
+                cur.execute('SELECT COUNT(*) FROM feedback')
+                total_feedback = cur.fetchone()[0]
+                
+                # Get scripts count (handle if table doesn't exist)
                 try:
-                    total_scripts = len(session.exec(select(Script)).all())
+                    cur.execute('SELECT COUNT(*) FROM script')
+                    total_scripts = cur.fetchone()[0]
                 except Exception:
                     total_scripts = 0
                 
-                avg_rating = session.exec(
-                    select(Feedback.rating).where(Feedback.rating.is_not(None))
-                ).all()
-                avg_rating = sum(avg_rating) / len(avg_rating) if avg_rating else 0
+                # Get average rating
+                cur.execute('SELECT AVG(rating) FROM feedback WHERE rating IS NOT NULL')
+                avg_rating = cur.fetchone()[0] or 0.0
                 
+                # Get sentiment breakdown (handle if column doesn't exist)
                 sentiment_counts = {}
-                sentiments = session.exec(select(Feedback.sentiment)).all()
-                for sentiment in sentiments:
-                    if sentiment:
-                        sentiment_counts[sentiment] = sentiment_counts.get(sentiment, 0) + 1
+                try:
+                    cur.execute('SELECT sentiment, COUNT(*) FROM feedback WHERE sentiment IS NOT NULL GROUP BY sentiment')
+                    sentiment_counts = dict(cur.fetchall())
+                except Exception:
+                    sentiment_counts = {}
+                
+                # Get average engagement (handle if column doesn't exist)
+                avg_engagement = 0.0
+                try:
+                    cur.execute('SELECT AVG(engagement_score) FROM feedback WHERE engagement_score IS NOT NULL')
+                    avg_engagement = cur.fetchone()[0] or 0.0
+                except Exception:
+                    avg_engagement = 0.0
+                
+                cur.close()
+                conn.close()
                 
                 return {
                     "total_users": total_users,
@@ -389,16 +415,59 @@ class DatabaseManager:
                     "total_feedback": total_feedback,
                     "total_scripts": total_scripts,
                     "average_rating": round(avg_rating, 2),
+                    "average_engagement": round(avg_engagement, 2),
                     "sentiment_breakdown": sentiment_counts
                 }
             except Exception as e:
-                # Fallback for database errors
+                print(f"PostgreSQL analytics query failed: {e}")
                 return {
                     "total_users": 0,
                     "total_content": 0,
                     "total_feedback": 0,
                     "total_scripts": 0,
                     "average_rating": 0.0,
+                    "average_engagement": 0.0,
+                    "sentiment_breakdown": {},
+                    "error": str(e)
+                }
+        else:
+            # SQLite fallback
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                cur = conn.cursor()
+                
+                cur.execute('SELECT COUNT(*) FROM user')
+                total_users = cur.fetchone()[0]
+                
+                cur.execute('SELECT COUNT(*) FROM content')
+                total_content = cur.fetchone()[0]
+                
+                cur.execute('SELECT COUNT(*) FROM feedback')
+                total_feedback = cur.fetchone()[0]
+                
+                cur.execute('SELECT AVG(rating) FROM feedback WHERE rating IS NOT NULL')
+                avg_rating = cur.fetchone()[0] or 0.0
+                
+                conn.close()
+                
+                return {
+                    "total_users": total_users,
+                    "total_content": total_content,
+                    "total_feedback": total_feedback,
+                    "total_scripts": 0,
+                    "average_rating": round(avg_rating, 2),
+                    "average_engagement": 0.0,
+                    "sentiment_breakdown": {}
+                }
+            except Exception as e:
+                return {
+                    "total_users": 0,
+                    "total_content": 0,
+                    "total_feedback": 0,
+                    "total_scripts": 0,
+                    "average_rating": 0.0,
+                    "average_engagement": 0.0,
                     "sentiment_breakdown": {},
                     "error": str(e)
                 }
