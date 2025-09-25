@@ -1955,6 +1955,62 @@ def get_lm_stats(current_user = Depends(get_current_user)):
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
+@step6_router.get('/debug/database')
+def debug_database():
+    """Debug database connection - PUBLIC ACCESS"""
+    try:
+        import os
+        DATABASE_URL = os.getenv("DATABASE_URL", "not_set")
+        db_type = "PostgreSQL" if 'postgresql' in DATABASE_URL else "SQLite"
+        
+        # Test direct connection
+        if 'postgresql' in DATABASE_URL:
+            try:
+                import psycopg2
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                
+                cur.execute('SELECT COUNT(*) FROM "user"')
+                user_count = cur.fetchone()[0]
+                
+                cur.execute('SELECT COUNT(*) FROM content')
+                content_count = cur.fetchone()[0]
+                
+                cur.execute('SELECT COUNT(*) FROM feedback')
+                feedback_count = cur.fetchone()[0]
+                
+                cur.close()
+                conn.close()
+                
+                return {
+                    "database_type": db_type,
+                    "database_url_prefix": DATABASE_URL[:50],
+                    "direct_query_results": {
+                        "users": user_count,
+                        "content": content_count,
+                        "feedback": feedback_count
+                    },
+                    "status": "success"
+                }
+            except Exception as pg_error:
+                return {
+                    "database_type": db_type,
+                    "database_url_prefix": DATABASE_URL[:50],
+                    "error": str(pg_error),
+                    "status": "postgresql_failed"
+                }
+        else:
+            return {
+                "database_type": db_type,
+                "database_url": DATABASE_URL,
+                "status": "using_sqlite"
+            }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "status": "failed"
+        }
+
 @step6_router.get('/logs')
 def get_logs(lines: int = 50, admin_key: str = None):
     """STEP 6C: View recent system logs for debugging (Admin Only)"""
