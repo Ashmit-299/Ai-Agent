@@ -2252,11 +2252,11 @@ def get_bhiv_analytics(current_user = Depends(get_current_user)):
             from core.database import DatabaseManager
             db = DatabaseManager()
             analytics_data = db.get_analytics_data()
-            total_users = analytics_data['total_users']
-            total_content = analytics_data['total_content']
-            total_feedback = analytics_data['total_feedback']
-            avg_rating = analytics_data['average_rating']
-            sentiment_data = analytics_data['sentiment_breakdown']
+            total_users = analytics_data.get('total_users', 0)
+            total_content = analytics_data.get('total_content', 0)
+            total_feedback = analytics_data.get('total_feedback', 0)
+            avg_rating = analytics_data.get('average_rating', 0.0)
+            sentiment_data = analytics_data.get('sentiment_breakdown', {})
             avg_engagement = analytics_data.get('average_engagement', 0.0)
         except Exception as db_error:
             import logging
