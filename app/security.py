@@ -3,6 +3,15 @@
 Production-grade security configuration for AI Agent
 """
 
+# Suppress bcrypt warnings completely
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import fix_bcrypt
+except:
+    pass
+
 import os
 import secrets
 import hashlib

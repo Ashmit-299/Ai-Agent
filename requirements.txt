@@ -4,8 +4,8 @@ sqlmodel
 pydantic
 python-multipart
 python-jose[cryptography]
-passlib[bcrypt]
-bcrypt
+passlib[bcrypt]==1.7.4
+bcrypt==4.1.2
 httpx
 tenacity
 vaderSentiment
@@ -18,8 +18,9 @@ imageio-ffmpeg==0.4.9
 Pillow
 numpy
 python-dotenv
-sentry-sdk
+sentry-sdk[fastapi]
 posthog
+json-log-formatter
 psycopg2-binary
 jinja2
 alembic

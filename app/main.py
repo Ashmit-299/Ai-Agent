@@ -11,6 +11,7 @@ except ImportError:
     pass
 
 import os
+import time
 from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -21,26 +22,15 @@ from fastapi.security import HTTPBearer
 # Import Task 6 configuration
 from .config import validate_config, get_config, SENTRY_DSN, POSTHOG_API_KEY
 
-# Initialize Sentry and PostHog
-try:
-    import sentry_sdk
-    if SENTRY_DSN:
-        sentry_sdk.init(dsn=SENTRY_DSN)
-except ImportError:
-    sentry_sdk = None
-
-# PostHog initialization
-try:
-    from posthog import Posthog
-    if POSTHOG_API_KEY:
-        ph = Posthog(api_key=POSTHOG_API_KEY, host="https://app.posthog.com")
-        posthog = ph  # Keep backward compatibility
-    else:
-        ph = None
-        posthog = None
-except (ImportError, TypeError):
-    ph = None
-    posthog = None
+# Initialize advanced observability system
+from .observability import sentry_manager, posthog_manager, structured_logger
+from .middleware import (
+    ObservabilityMiddleware, 
+    UserContextMiddleware, 
+    ErrorHandlingMiddleware,
+    get_system_health
+)
+from .observability import performance_monitor
 
 # Initialize SQLModel
 try:
@@ -152,6 +142,35 @@ def custom_openapi():
     # Set global security requirement
     openapi_schema["security"] = [{"BearerAuth": []}]
     
+    # Set security for specific endpoints - debug-auth should require auth to test properly
+    if "paths" in openapi_schema:
+        public_endpoints = [
+            "/",
+            "/test",
+            "/health",
+            "/demo-login", 
+            "/users/register",
+            "/users/login"
+        ]
+        
+        # Make debug-auth require authentication to test the authorize button
+        auth_test_endpoints = ["/debug-auth"]
+        
+        for endpoint_path in public_endpoints:
+            if endpoint_path in openapi_schema["paths"]:
+                for method_name, method_info in openapi_schema["paths"][endpoint_path].items():
+                    if isinstance(method_info, dict):
+                        # Set empty security array to override global security
+                        method_info["security"] = []
+        
+        # Ensure debug-auth requires authentication
+        for endpoint_path in auth_test_endpoints:
+            if endpoint_path in openapi_schema["paths"]:
+                for method_name, method_info in openapi_schema["paths"][endpoint_path].items():
+                    if isinstance(method_info, dict):
+                        # Require BearerAuth for testing
+                        method_info["security"] = [{"BearerAuth": []}]
+    
 
     
     app.openapi_schema = openapi_schema
@@ -159,34 +178,153 @@ def custom_openapi():
 
 app.openapi = custom_openapi
 
+# Test endpoint for data saving
+@app.post("/test-data-saving", tags=["Testing"])
+async def test_data_saving(request: Request):
+    """Test endpoint to verify data is saving to both bucket and database - REQUIRES AUTHENTICATION"""
+    try:
+        from app.auth import get_current_user_required
+        current_user = await get_current_user_required(request)
+    except Exception:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    
+    try:
+        import time
+        from core import bhiv_bucket
+        from core.database import DatabaseManager
+        
+        timestamp = time.time()
+        test_id = f"test_{int(timestamp)}_{current_user.user_id}"
+        
+        # Test bucket saving
+        bucket_data = {
+            'test_id': test_id,
+            'message': 'Test bucket saving',
+            'timestamp': timestamp,
+            'type': 'bucket_test'
+        }
+        
+        bucket_results = {}
+        for segment in ['scripts', 'logs', 'storyboards', 'ratings']:
+            try:
+                filename = f"{segment}_test_{test_id}.json"
+                bhiv_bucket.save_json(segment, filename, bucket_data)
+                bucket_results[segment] = 'success'
+            except Exception as e:
+                bucket_results[segment] = f'failed: {str(e)}'
+        
+        # Test database saving
+        db_results = {}
+        try:
+            db = DatabaseManager()
+            
+            # Test system log
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute('''
+                        INSERT INTO system_logs (level, message, module, timestamp, user_id)
+                        VALUES (?, ?, ?, ?, ?)
+                    ''', ('INFO', f'Test log {test_id}', 'test', timestamp, 'test_user'))
+                db_results['system_logs'] = 'success'
+                conn.close()
+            except Exception as e:
+                db_results['system_logs'] = f'failed: {str(e)}'
+            
+            # Test analytics
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute('''
+                        INSERT INTO analytics (event_type, user_id, content_id, event_data, timestamp, ip_address)
+                        VALUES (?, ?, ?, ?, ?, ?)
+                    ''', ('test_event', 'test_user', None, f'{{"test_id": "{test_id}"}}', timestamp, '127.0.0.1'))
+                db_results['analytics'] = 'success'
+                conn.close()
+            except Exception as e:
+                db_results['analytics'] = f'failed: {str(e)}'
+                
+        except Exception as e:
+            db_results['database'] = f'failed: {str(e)}'
+        
+        return {
+            'test_id': test_id,
+            'user_id': current_user.user_id,
+            'username': current_user.username,
+            'timestamp': timestamp,
+            'bucket_results': bucket_results,
+            'database_results': db_results,
+            'message': 'Data saving test completed'
+        }
+        
+    except Exception as e:
+        return {
+            'error': str(e), 
+            'message': 'Data saving test failed',
+            'user_id': current_user.user_id if current_user else 'unknown'
+        }
+
 # Debug endpoint for authentication testing
 @app.get("/debug-auth", tags=["Authentication Test"])
 async def debug_auth(request: Request):
-    """Debug endpoint to check authentication issues"""
+    """Debug endpoint to check authentication status - Tests Swagger UI Authorization"""
     try:
-        from app.auth import get_current_user_optional
-        current_user = await get_current_user_optional(request)
+        # Check for authorization header directly
+        auth_header = request.headers.get("authorization") or request.headers.get("Authorization")
         
-        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            # Try to authenticate using security manager
+            try:
+                user_data = await security_manager.authenticate_request(request)
+                if user_data:
+                    return {
+                        "authenticated": True,
+                        "user_id": user_data.get("user_id"),
+                        "username": user_data.get("username"),
+                        "message": "✅ Swagger UI Authorization working!",
+                        "auth_header_present": True,
+                        "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                    }
+            except Exception as auth_error:
+                return {
+                    "authenticated": False,
+                    "message": f"❌ Token invalid: {str(auth_error)}",
+                    "auth_header_present": True,
+                    "help": "Get a new token from /users/login",
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                }
         
-        if current_user:
-            return {
-                "success": True,
-                "message": "Authentication working!",
-                "user_id": current_user.user_id,
-                "username": current_user.username,
-                "authenticated": True
-            }
-        else:
-            return {
-                "success": False,
-                "message": "No authentication provided",
-                "auth_header": "Present" if auth_header else "Missing",
-                "authenticated": False
-            }
+        return {
+            "authenticated": False,
+            "message": "❌ No authorization header found",
+            "auth_header_present": bool(auth_header),
+            "help": "Click the green 'Authorize' button in Swagger UI and enter a Bearer token",
+            "instructions": [
+                "1. Get token from POST /users/login (username: demo, password: demo1234)",
+                "2. Click 🔒 Authorize button at top of page",
+                "3. Enter token in format: your_token_here (no 'Bearer ' prefix)",
+                "4. Click Authorize, then test this endpoint again"
+            ],
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
             
     except Exception as e:
-        return {"error": "Debug failed", "exception": str(e)}
+        return {
+            "authenticated": False,
+            "error": str(e),
+            "message": "Authentication check failed",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+# Add middleware in correct order (last added runs first)
+app.add_middleware(ObservabilityMiddleware)
+app.add_middleware(UserContextMiddleware)  
+app.add_middleware(ErrorHandlingMiddleware)
 
 # Enhanced security middleware
 app.add_middleware(
@@ -203,25 +341,16 @@ app.add_middleware(
     expose_headers=["X-Rate-Limit-Remaining", "X-Rate-Limit-Reset"]
 )
 
-# PostHog middleware
-@app.middleware("http")
-async def ph_middleware(req: Request, call_next):
-    """PostHog analytics middleware"""
-    res = await call_next(req)
-    if ph and POSTHOG_API_KEY:
-        try:
-            ph.capture(
-                distinct_id="server",
-                event="request",
-                properties={
-                    "path": req.url.path,
-                    "status": res.status_code,
-                    "method": req.method
-                }
-            )
-        except Exception:
-            pass  # Don't fail on tracking errors
-    return res
+# Add observability endpoints
+@app.get("/health/detailed")
+async def health_detailed():
+    """Detailed health check with observability status"""
+    return await get_system_health()
+
+@app.get("/metrics/performance")
+async def performance_metrics():
+    """Get performance metrics summary"""
+    return performance_monitor.get_performance_summary()
 
 @app.middleware("http")
 async def enhanced_security_middleware(request: Request, call_next):
@@ -273,21 +402,21 @@ async def enhanced_security_middleware(request: Request, call_next):
         process_time = time.time() - start_time
         response.headers["X-Process-Time"] = str(process_time)
         
-        # PostHog event tracking
-        if posthog and POSTHOG_API_KEY:
-            try:
-                posthog.capture(
-                    distinct_id=safe_ip,
-                    event="api_request",
-                    properties={
+        # Advanced event tracking
+        try:
+            # Log security events if suspicious
+            if response.status_code >= 400:
+                structured_logger.log_security_event(
+                    "HTTP_ERROR",
+                    client_ip=safe_ip,
+                    details={
                         "path": safe_path,
                         "method": safe_method,
-                        "status_code": response.status_code,
-                        "process_time": process_time
+                        "status_code": response.status_code
                     }
                 )
-            except Exception:
-                pass  # Don't fail on tracking errors
+        except Exception:
+            pass
         
         return response
         
@@ -300,9 +429,15 @@ async def enhanced_security_middleware(request: Request, call_next):
         raise e
     except Exception as e:
         logger.error(f"Middleware error: {e}")
-        # Capture exception in Sentry
-        if sentry_sdk and SENTRY_DSN:
-            sentry_sdk.capture_exception(e)
+        # Capture exception with advanced observability
+        try:
+            sentry_manager.capture_exception(e, {
+                "path": safe_path,
+                "method": safe_method,
+                "client_ip": client_ip
+            })
+        except Exception:
+            pass
         raise HTTPException(status_code=500, detail="Internal server error")
 
 # Include routes in proper systematic sequential order
@@ -333,6 +468,11 @@ except Exception:
 @app.on_event("startup")
 async def startup_event():
     """Application startup event"""
+    structured_logger.log_business_event("application_startup", metadata={
+        "environment": os.getenv("ENVIRONMENT", "development"),
+        "version": os.getenv("GIT_SHA", "unknown")
+    })
+    
     logger.info("AI Content Uploader Agent starting up...")
     logger.info("Security features: Rate limiting, Input validation, File type restrictions")
     
@@ -342,15 +482,6 @@ async def startup_event():
         logger.info("Task 6 configuration validated successfully")
     else:
         logger.warning("Task 6 configuration incomplete - some features may be limited")
-    
-    # Initialize Sentry and PostHog
-    if sentry_sdk and SENTRY_DSN:
-        sentry_sdk.capture_message("Application startup")
-        logger.info("Sentry monitoring initialized")
-    
-    if posthog and POSTHOG_API_KEY:
-        posthog.capture(distinct_id="system", event="startup")
-        logger.info("PostHog analytics initialized")
     
     # Initialize database
     try:
@@ -364,17 +495,22 @@ async def startup_event():
         logger.warning(f"Database initialization failed: {e}")
         # Routes will handle fallback automatically
 
-@app.on_event("shutdown")
+@app.on_event("shutdown") 
 async def shutdown_event():
     """Application shutdown event"""
+    structured_logger.log_business_event("application_shutdown")
     logger.info("AI Content Uploader Agent shutting down...")
 
-# Sentry exception handler
+# Advanced exception handler
 @app.exception_handler(Exception)
 async def capture_exc(req: Request, exc: Exception):
-    """Capture exceptions in Sentry"""
-    if sentry_sdk and SENTRY_DSN:
-        sentry_sdk.capture_exception(exc)
+    """Capture exceptions with advanced observability"""
+    sentry_manager.capture_exception(exc, {
+        "path": req.url.path,
+        "method": req.method,
+        "client_ip": req.client.host if req.client else "unknown"
+    })
+    
     logger.error(f"Unhandled exception: {exc}")
     raise exc
 

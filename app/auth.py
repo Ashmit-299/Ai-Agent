@@ -3,6 +3,15 @@
 Production-grade JWT Authentication system
 """
 
+# Suppress bcrypt warnings completely
+try:
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    import fix_bcrypt
+except:
+    pass
+
 from fastapi import APIRouter, HTTPException, Depends, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from typing import Optional, Dict, Any
@@ -64,7 +73,7 @@ async def get_current_user_required(request: Request) -> AuthUser:
 
 @router.post("/register", response_model=Token, status_code=201)
 async def register_user(user_data: UserRegister, request: Request):
-    """STEP 2A: Register new user account with enhanced security"""
+    """STEP 2A: Register new user account with enhanced security - PUBLIC ACCESS"""
     client_ip = security_manager.get_client_ip(request)
     
     try:
@@ -195,7 +204,7 @@ async def register_user(user_data: UserRegister, request: Request):
 
 @router.post("/login", response_model=Token, status_code=200)
 async def login_user(form_data: OAuth2PasswordRequestForm = Depends(), request: Request = None):
-    """STEP 2B: Login user with enhanced security"""
+    """STEP 2B: Login user with enhanced security - PUBLIC ACCESS"""
     client_ip = security_manager.get_client_ip(request)
     
     # Check rate limiting

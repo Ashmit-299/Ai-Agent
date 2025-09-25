@@ -244,24 +244,17 @@ def create_multi_frame_video(text: str, output_path: str, frame_duration: float 
     except ImportError:
         raise ImportError("moviepy and PIL are required: pip install moviepy==1.0.3 Pillow")
 
-    # Split text by sentences - each sentence becomes one frame
+    # Split text by lines first, then by sentences - ensure no content is skipped
     sentences = []
     for line in text.split('\n'):
         line = line.strip()
         if line:
-            # Split by sentence endings but preserve punctuation
-            line_sentences = re.split(r'([.!?]+)', line)
-            combined_sentences = []
-            for i in range(0, len(line_sentences)-1, 2):
-                sentence = line_sentences[i].strip()
-                punct = line_sentences[i+1] if i+1 < len(line_sentences) else ''
-                if sentence:
-                    combined_sentences.append(sentence + punct)
-            line_sentences = combined_sentences
-            for sentence in line_sentences:
-                sentence = sentence.strip()
-                if sentence.strip():
-                    sentences.append(sentence)
+            # Split by sentence endings
+            parts = re.split(r'[.!?]+', line)
+            for part in parts:
+                part = part.strip()
+                if part:  # Only add non-empty parts
+                    sentences.append(part)
     
     if not sentences:
         sentences = ["No content"]

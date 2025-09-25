@@ -88,6 +88,7 @@ def send_invitation_email(email, inviter, token):
 from .agent import RLAgent
 from .streaming_metrics import streaming_metrics
 from .task_queue import task_queue
+from .observability import track_performance, track_user_action
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
@@ -152,8 +153,14 @@ def init_db():
                 comment TEXT,
                 sentiment TEXT,
                 engagement_score REAL,
+                ip_address TEXT,
                 timestamp REAL
             )""")
+            # Add ip_address column if it doesn't exist
+            try:
+                cur.execute("ALTER TABLE feedback ADD COLUMN ip_address TEXT")
+            except:
+                pass  # Column already exists
         return conn
 
 # Initialize database connection - use sqlite3 directly to avoid session conflicts
@@ -187,7 +194,7 @@ router = APIRouter(tags=["Default Endpoints"])
 # Add only essential default endpoints that need to be at root level
 @router.get('/health')
 def health_check_default():
-    """Default health check endpoint"""
+    """Default health check endpoint - PUBLIC ACCESS"""
     try:
         env_validation = validate_environment()
         return {
@@ -196,14 +203,16 @@ def health_check_default():
             "version": "1.0.0",
             "environment_valid": env_validation['validation']['valid'],
             "config_warnings": env_validation['validation']['warning_count'],
-            "message": "Use /docs for API documentation"
+            "message": "Use /docs for API documentation",
+            "authentication": "not_required"
         }
     except Exception:
         return {
             "status": "healthy", 
             "service": "AI Content Uploader Agent",
             "version": "1.0.0",
-            "message": "Use /docs for API documentation"
+            "message": "Use /docs for API documentation",
+            "authentication": "not_required"
         }
 
 @router.get('/')
@@ -236,63 +245,77 @@ def simple_test():
 
 # Create demo user if not exists
 def create_demo_user():
+    """Check demo user in main database - now uses Supabase"""
     try:
-        from .security import PasswordManager
-        hash_password = PasswordManager.hash_password
-    except ImportError:
-        # Fallback to auth module
-        from .auth import hash_password
-    try:
-        if SQLMODEL_AVAILABLE and db_manager:
-            # Use SQLModel
+        print("Checking demo user in main database...")
+        
+        # Check main database first (Supabase)
+        from core.database import DatabaseManager
+        db = DatabaseManager()
+        existing_user = db.get_user_by_username('demo')
+        
+        if existing_user:
+            # Verify password works
             try:
-                existing_user = db_manager.get_user_by_username('demo')
-                if not existing_user:
-                    demo_hash = hash_password('demo1234')
-                    demo_user_data = {
-                        'user_id': 'demo001',
-                        'username': 'demo',
-                        'password_hash': demo_hash,
-                        'email': 'demo@example.com',
-                        'email_verified': True,
-                        'created_at': time.time()
-                    }
-                    db_manager.create_user(demo_user_data)
-            except Exception as e:
-                # Fallback to sqlite3 if SQLModel fails
-                import sqlite3
-                temp_conn = sqlite3.connect('data.db')
-                with temp_conn:
-                    cur = temp_conn.cursor()
-                    cur.execute('SELECT user_id FROM user WHERE username=?', ('demo',))
-                    if not cur.fetchone():
-                        demo_hash = hash_password('demo1234')
-                        cur.execute('INSERT INTO user(user_id, username, password_hash, email, email_verified, created_at) VALUES (?,?,?,?,?,?)',
-                                   ('demo001', 'demo', demo_hash, 'demo@example.com', True, time.time()))
-                temp_conn.close()
+                from .security import PasswordManager
+                if PasswordManager.verify_password('demo1234', existing_user.password_hash):
+                    print("Demo user ready in main database with correct password")
+                    return True
+                else:
+                    print("Demo user exists but password verification failed - run fix_demo_password.py")
+                    return False
+            except Exception as verify_error:
+                print(f"Password verification error: {verify_error}")
+                return False
         else:
-            # Fallback to sqlite3
-            import sqlite3
-            temp_conn = sqlite3.connect('data.db')
-            with temp_conn:
-                cur = temp_conn.cursor()
-                cur.execute('SELECT user_id FROM user WHERE username=?', ('demo',))
-                if not cur.fetchone():
-                    demo_hash = hash_password('demo1234')
-                    cur.execute('INSERT INTO user(user_id, username, password_hash, email, email_verified, created_at) VALUES (?,?,?,?,?,?)',
-                               ('demo001', 'demo', demo_hash, 'demo@example.com', True, time.time()))
-            temp_conn.close()
+            print("Demo user not found in main database - run create_demo_in_supabase.py")
+            return False
+            
     except Exception as e:
-        import logging
-        logging.warning(f"Demo user creation failed: {e}")
+        print(f"Demo user check failed: {e}")
+        return False
 
-create_demo_user()
+def update_demo_password(new_password):
+    """Update demo user password with proper hashing"""
+    try:
+        # Use the same password hashing as the auth system
+        try:
+            from .security import PasswordManager
+            demo_hash = PasswordManager.hash_password(new_password)
+        except ImportError:
+            # Fallback to bcrypt directly
+            from passlib.context import CryptContext
+            pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+            demo_hash = pwd_context.hash(new_password)
+        
+        import sqlite3
+        temp_conn = sqlite3.connect('data.db')
+        with temp_conn:
+            cur = temp_conn.cursor()
+            cur.execute('UPDATE user SET password_hash=? WHERE username=?', (demo_hash, 'demo'))
+            if cur.rowcount == 0:
+                # Create demo user if doesn't exist
+                cur.execute('INSERT INTO user(user_id, username, password_hash, email, email_verified, created_at) VALUES (?,?,?,?,?,?)',
+                           ('demo001', 'demo', demo_hash, 'demo@example.com', True, time.time()))
+        temp_conn.close()
+        return True
+    except Exception as e:
+        print(f"Failed to update demo password: {e}")
+        return False
+
+# Check demo user on startup
+try:
+    demo_ready = create_demo_user()
+    if not demo_ready:
+        print("Demo user needs to be fixed - run fix_demo_password.py")
+except Exception as e:
+    print(f"Demo user check failed on startup: {e}")
 
 # ===== STEP 1: SYSTEM STATUS & ONBOARDING =====
 
 @step1_router.get('/health')
 def health_check():
-    """STEP 1A: Check if system is running"""
+    """STEP 1A: Check if system is running - PUBLIC ACCESS"""
     try:
         env_validation = validate_environment()
         return {
@@ -302,6 +325,7 @@ def health_check():
             "systematic_organization": "9 step workflow",
             "environment_valid": env_validation['validation']['valid'],
             "config_warnings": env_validation['validation']['warning_count'],
+            "authentication": "not_required",
             "next_step": "GET /demo-login for test credentials or POST /users/register to create account"
         }
     except Exception:
@@ -309,16 +333,77 @@ def health_check():
             "status": "healthy", 
             "service": "AI Content Uploader Agent",
             "version": "1.0.0",
+            "authentication": "not_required",
             "next_step": "GET /demo-login for test credentials or POST /users/register to create account"
         }
 
 @step1_router.get('/demo-login')
 def demo_login():
-    """STEP 1B: Get demo credentials for quick testing"""
+    """STEP 1B: Get demo credentials for quick testing - PUBLIC ACCESS"""
+    # Use static demo credentials for reliability
+    demo_password = "demo1234"
+    
+    # Ensure demo user exists and password works
+    create_demo_user()
+    
+    # Test login credentials
+    login_test_result = test_demo_login()
+    
     return {
-        "demo_credentials": {"username": "demo", "password": "demo1234"},
+        "demo_credentials": {"username": "demo", "password": demo_password},
+        "authentication": "not_required",
+        "login_test": login_test_result,
+        "password_hashing": "bcrypt (compatible with login system)",
+        "instructions": [
+            "1. Copy the credentials above",
+            "2. Go to POST /users/login endpoint",
+            "3. Use 'Try it out' and enter username and password",
+            "4. Execute to get your access token"
+        ],
         "next_step": "POST /users/login with these credentials to get access token"
     }
+
+@step1_router.get('/debug-auth')
+async def debug_auth(request: Request):
+    """STEP 1C: Debug authentication status for Swagger UI - PUBLIC ACCESS"""
+    try:
+        current_user = await get_current_user_optional(request)
+        return {
+            "authenticated": current_user is not None,
+            "user_id": current_user.user_id if current_user else None,
+            "username": current_user.username if current_user else None,
+            "authorization_header": bool(request.headers.get("Authorization")),
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+    except Exception as e:
+        return {
+            "authenticated": False,
+            "error": str(e),
+            "authorization_header": bool(request.headers.get("Authorization")),
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+def test_demo_login():
+    """Test demo login credentials"""
+    try:
+        from .security import PasswordManager
+        from core.database import DatabaseManager
+        
+        # Test main database first (Supabase)
+        db = DatabaseManager()
+        user = db.get_user_by_username('demo')
+        
+        if user:
+            if PasswordManager.verify_password('demo1234', user.password_hash):
+                return {"status": "success", "message": "Demo credentials work correctly in main database"}
+            else:
+                return {"status": "failed", "message": "Password verification failed in main database"}
+        else:
+            return {"status": "failed", "message": "Demo user not found in main database"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+
 
 # ===== STEP 2: USER AUTHENTICATION =====
 
@@ -505,10 +590,23 @@ def list_contents(limit: int = 20, current_user = Depends(get_current_user)):
 # Simplified video generation endpoint above
 
 @step3_router.post('/upload', response_model=ContentResponse, status_code=201)
+@track_performance("content_upload")
+@track_user_action("upload_content")
 async def upload(file: UploadFile = File(...), title: str = Form(...), description: str = Form(''), current_user = Depends(get_current_user), session: Session = Depends(get_session)):
     """STEP 3B: Upload content file (requires authentication)"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Track user action with observability
+    try:
+        from .observability import track_event, set_user_context
+        set_user_context(current_user.user_id, current_user.username)
+        track_event(current_user.user_id, "file_upload_started", {
+            "file_type": file.content_type,
+            "title": title
+        })
+    except Exception:
+        pass  # Don't fail on tracking errors
     try:
         if not file.filename:
             raise HTTPException(status_code=400, detail="No filename provided")
@@ -578,24 +676,70 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         tags = suggest_tags(title, description)
         uploaded_at = time.time()
         
-        # Save to Supabase database
+        # Save to both Supabase and local databases
         try:
-            from core.database import DatabaseManager
-            db = DatabaseManager()
-            content_data = {
-                'content_id': content_id,
-                'uploader_id': uploader_id,
-                'title': title,
-                'description': description,
-                'file_path': safe_path,
-                'content_type': file.content_type or 'application/octet-stream',
-                'authenticity_score': authenticity,
-                'current_tags': json.dumps(tags),
-                'uploaded_at': uploaded_at
-            }
-            db.create_content(content_data)
+            # Save to Supabase first
+            import psycopg2
+            DATABASE_URL = os.getenv("DATABASE_URL")
+            if 'postgresql' in DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                cur.execute("""
+                    INSERT INTO content (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    content_id, uploader_id, title, description, safe_path,
+                    file.content_type or 'application/octet-stream', uploaded_at,
+                    authenticity, json.dumps(tags), 0, 0, 0
+                ))
+                conn.commit()
+                cur.close()
+                conn.close()
+                import logging
+                logging.info(f"Content saved to Supabase: {content_id}")
+                
+                # Save to system logs
+                try:
+                    from core.database import DatabaseManager
+                    DatabaseManager.save_system_log(
+                        level="INFO",
+                        message=f"Content uploaded to Supabase: {content_id} - {title}",
+                        module="file_upload",
+                        user_id=uploader_id
+                    )
+                except Exception as log_error:
+                    print(f"Failed to save system log: {log_error}")
             
-            # If it's a script file, also save to scripts table
+            # Save to local SQLite as backup
+            import sqlite3
+            local_conn = sqlite3.connect('data.db')
+            with local_conn:
+                cur = local_conn.cursor()
+                cur.execute("""
+                    INSERT OR REPLACE INTO content (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    content_id, uploader_id, title, description, safe_path,
+                    file.content_type or 'application/octet-stream', uploaded_at,
+                    authenticity, json.dumps(tags), 0, 0, 0
+                ))
+            local_conn.close()
+            import logging
+            logging.info(f"Content saved to local database: {content_id}")
+            
+            # Save to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="INFO",
+                    message=f"Content uploaded to local database: {content_id} - {title}",
+                    module="file_upload",
+                    user_id=uploader_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save system log: {log_error}")
+            
+            # If it's a script file, also save to scripts table and bucket
             if ext == '.txt' and script_path:
                 try:
                     script_content = data.decode('utf-8')
@@ -607,14 +751,117 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
                         'script_content': script_content,
                         'script_type': 'uploaded_text',
                         'file_path': script_path,
-                        'used_for_generation': False
+                        'used_for_generation': False,
+                        'created_at': time.time()
                     }
-                    db.create_script(script_data)
+                    
+                    # Save to both Supabase and local database
+                    try:
+                        # Supabase first
+                        import psycopg2
+                        DATABASE_URL = os.getenv("DATABASE_URL")
+                        if 'postgresql' in DATABASE_URL:
+                            conn = psycopg2.connect(DATABASE_URL)
+                            cur = conn.cursor()
+                            cur.execute("""
+                                INSERT INTO script (script_id, content_id, user_id, title, script_content, script_type, file_path, created_at, used_for_generation)
+                                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                            """, (
+                                script_data['script_id'], script_data['content_id'], script_data['user_id'],
+                                script_data['title'], script_data['script_content'], script_data['script_type'],
+                                script_data['file_path'], script_data['created_at'], script_data['used_for_generation']
+                            ))
+                            conn.commit()
+                            cur.close()
+                            conn.close()
+                            import logging
+                            logging.info(f"Script saved to Supabase: upload_{content_id}")
+                            
+                            # Save to system logs
+                            try:
+                                from core.database import DatabaseManager
+                                DatabaseManager.save_system_log(
+                                    level="INFO",
+                                    message=f"Script uploaded to Supabase: upload_{content_id} - {title}",
+                                    module="script_upload",
+                                    user_id=uploader_id
+                                )
+                            except Exception as log_error:
+                                print(f"Failed to save system log: {log_error}")
+                        
+                        # Local SQLite backup
+                        import sqlite3
+                        local_conn = sqlite3.connect('data.db')
+                        with local_conn:
+                            cur = local_conn.cursor()
+                            cur.execute("""CREATE TABLE IF NOT EXISTS script (
+                                script_id TEXT PRIMARY KEY,
+                                content_id TEXT,
+                                user_id TEXT,
+                                title TEXT,
+                                script_content TEXT,
+                                script_type TEXT,
+                                file_path TEXT,
+                                created_at REAL,
+                                used_for_generation BOOLEAN DEFAULT FALSE,
+                                FOREIGN KEY (content_id) REFERENCES content (content_id)
+                            )""")
+                            cur.execute("""
+                                INSERT OR REPLACE INTO script (script_id, content_id, user_id, title, script_content, script_type, file_path, created_at, used_for_generation)
+                                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                script_data['script_id'], script_data['content_id'], script_data['user_id'],
+                                script_data['title'], script_data['script_content'], script_data['script_type'],
+                                script_data['file_path'], script_data['created_at'], script_data['used_for_generation']
+                            ))
+                        local_conn.close()
+                        import logging
+                        logging.info(f"Script saved to local database: upload_{content_id}")
+                        
+                        # Save to system logs
+                        try:
+                            from core.database import DatabaseManager
+                            DatabaseManager.save_system_log(
+                                level="INFO",
+                                message=f"Script uploaded to local database: upload_{content_id} - {title}",
+                                module="script_upload",
+                                user_id=uploader_id
+                            )
+                        except Exception as log_error:
+                            print(f"Failed to save system log: {log_error}")
+                        
+                    except Exception as script_db_error:
+                        import logging
+                        logging.error(f"Failed to save script to database: {script_db_error}")
+                        
+                        # Save error to system logs
+                        try:
+                            from core.database import DatabaseManager
+                            DatabaseManager.save_system_log(
+                                level="ERROR",
+                                message=f"Script upload database save failed: {str(script_db_error)}",
+                                module="script_upload",
+                                user_id=uploader_id
+                            )
+                        except Exception as log_error:
+                            print(f"Failed to save error log: {log_error}")
+                    
+                    # Save script metadata to bucket
+                    script_metadata = {
+                        'script_id': script_data['script_id'],
+                        'content_id': content_id,
+                        'title': title,
+                        'script_type': 'uploaded_text',
+                        'file_size': len(data),
+                        'created_at': script_data['created_at'],
+                        'bucket_path': script_path
+                    }
+                    metadata_filename = f"script_meta_{content_id}.json"
+                    bhiv_bucket.save_json('scripts', metadata_filename, script_metadata)
+                    
+                except Exception as script_error:
                     import logging
-                    logging.info(f"Script data saved to database: upload_{content_id}")
-                except Exception as script_db_error:
-                    import logging
-                    logging.warning(f"Failed to save script to database: {script_db_error}")
+                    logging.warning(f"Failed to save script: {script_error}")
             
             # Save upload log
             log_data = {
@@ -642,7 +889,20 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         except Exception as db_error:
             import logging
             logging.error(f"Database save failed: {db_error}")
-            raise HTTPException(status_code=500, detail=f"Database save failed: {str(db_error)}")
+            # Don't raise exception, continue with file operations
+            print(f"Database save failed but file uploaded successfully: {db_error}")
+            
+            # Save error to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="ERROR",
+                    message=f"File upload database save failed: {str(db_error)}",
+                    module="file_upload",
+                    user_id=uploader_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save error log: {log_error}")
         
         # Register content with RL agent for future recommendations
         try:
@@ -650,6 +910,30 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         except Exception as rl_error:
             import logging
             logging.warning(f"Failed to register content with RL agent: {rl_error}")
+            
+            # Save warning to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="WARNING",
+                    message=f"Failed to register content with RL agent: {str(rl_error)}",
+                    module="rl_agent",
+                    user_id=uploader_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save warning log: {log_error}")
+        
+        # Track successful upload
+        try:
+            from .observability import track_event
+            track_event(current_user.user_id, "file_upload_completed", {
+                "content_id": content_id,
+                "file_type": file.content_type,
+                "authenticity_score": authenticity,
+                "tags_count": len(tags)
+            })
+        except Exception:
+            pass
         
         return ContentResponse(
             content_id=content_id,
@@ -666,6 +950,8 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         raise HTTPException(status_code=500, detail=str(e))
 
 @step3_router.post('/generate-video', response_model=VideoGenerationResponse, status_code=202)
+@track_performance("video_generation")
+@track_user_action("generate_video")
 async def generate_video(
     file: UploadFile = File(...),
     title: str = Form(...),
@@ -674,6 +960,17 @@ async def generate_video(
     """STEP 3C: Generate video one frame per script line"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Track video generation with observability
+    try:
+        from .observability import track_event, set_user_context
+        set_user_context(current_user.user_id, current_user.username)
+        track_event(current_user.user_id, "video_generation_started", {
+            "title": title,
+            "file_size": file.size
+        })
+    except Exception:
+        pass
 
     # Validate extension and size
     ext = os.path.splitext(file.filename or '')[1].lower()
@@ -751,26 +1048,184 @@ async def generate_video(
                     sentences.append(sentence)
     frame_duration = 3.0
 
-    # Save metadata to Supabase (optional)
+    # Save to both Supabase and local databases
     try:
-        from core.database import DatabaseManager
-        db = DatabaseManager()
-        content_data = {
-            'content_id': content_id,
-            'uploader_id': current_user.user_id,
-            'title': title,
-            'description': f'Generated video from script',
-            'file_path': bucket_video_path,
-            'content_type': 'video/mp4',
-            'duration_ms': int(frame_duration * len(sentences) * 1000),
-            'authenticity_score': 0.8,
-            'current_tags': json.dumps(['generated', 'video', 'script']),
-            'uploaded_at': timestamp
-        }
-        db.create_content(content_data)
+        import psycopg2
+        DATABASE_URL = os.getenv("DATABASE_URL")
+        
+        # Save to Supabase first
+        if 'postgresql' in DATABASE_URL:
+            conn = psycopg2.connect(DATABASE_URL)
+            cur = conn.cursor()
+            
+            # Save content first (required for foreign key)
+            cur.execute("""
+                INSERT INTO content (content_id, uploader_id, title, description, file_path, content_type, duration_ms, uploaded_at, authenticity_score, current_tags, views, likes, shares)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                content_id, current_user.user_id, title, 'Generated video from script',
+                bucket_video_path, 'video/mp4', int(frame_duration * len(sentences) * 1000),
+                timestamp, 0.8, json.dumps(['generated', 'video', 'script']), 0, 0, 0
+            ))
+            
+            # Save script after content (foreign key dependency)
+            cur.execute("""
+                INSERT INTO script (script_id, content_id, user_id, title, script_content, script_type, file_path, created_at, used_for_generation)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+            """, (
+                f"video_{content_id}", content_id, current_user.user_id,
+                f"Video script: {title}", script_content, 'video_generation',
+                None, timestamp, True
+            ))
+            
+            conn.commit()
+            cur.close()
+            conn.close()
+            print(f"Content and script saved to Supabase: {content_id}")
+            
+            # Save to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="INFO",
+                    message=f"Video generated and saved to Supabase: {content_id} - {title}",
+                    module="video_generation",
+                    user_id=current_user.user_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save system log: {log_error}")
+        
+        # Save to local SQLite as backup
+        import sqlite3
+        local_conn = sqlite3.connect('data.db')
+        with local_conn:
+            cur = local_conn.cursor()
+            
+            # Create tables if they don't exist
+            cur.execute("""CREATE TABLE IF NOT EXISTS content (
+                content_id TEXT PRIMARY KEY,
+                uploader_id TEXT,
+                title TEXT,
+                description TEXT,
+                file_path TEXT,
+                content_type TEXT,
+                duration_ms INTEGER,
+                uploaded_at REAL,
+                authenticity_score REAL,
+                current_tags TEXT,
+                views INTEGER DEFAULT 0,
+                likes INTEGER DEFAULT 0,
+                shares INTEGER DEFAULT 0
+            )""")
+            
+            cur.execute("""CREATE TABLE IF NOT EXISTS script (
+                script_id TEXT PRIMARY KEY,
+                content_id TEXT,
+                user_id TEXT,
+                title TEXT,
+                script_content TEXT,
+                script_type TEXT,
+                file_path TEXT,
+                created_at REAL,
+                used_for_generation BOOLEAN DEFAULT FALSE,
+                FOREIGN KEY (content_id) REFERENCES content (content_id)
+            )""")
+            
+            # Save content first
+            cur.execute("""
+                INSERT OR REPLACE INTO content (content_id, uploader_id, title, description, file_path, content_type, duration_ms, uploaded_at, authenticity_score, current_tags, views, likes, shares)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                content_id, current_user.user_id, title, 'Generated video from script',
+                bucket_video_path, 'video/mp4', int(frame_duration * len(sentences) * 1000),
+                timestamp, 0.8, json.dumps(['generated', 'video', 'script']), 0, 0, 0
+            ))
+            
+            # Save script after content
+            cur.execute("""
+                INSERT OR REPLACE INTO script (script_id, content_id, user_id, title, script_content, script_type, file_path, created_at, used_for_generation)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                f"video_{content_id}", content_id, current_user.user_id,
+                f"Video script: {title}", script_content, 'video_generation',
+                None, timestamp, True
+            ))
+        
+        local_conn.close()
+        print(f"Content and script saved to local database: {content_id}")
+        
+        # Save to system logs
+        try:
+            from core.database import DatabaseManager
+            DatabaseManager.save_system_log(
+                level="INFO",
+                message=f"Video content and script saved to local database: {content_id} - {title}",
+                module="video_generation",
+                user_id=current_user.user_id
+            )
+        except Exception as log_error:
+            print(f"Failed to save system log: {log_error}")
+        
+        # Save script to bucket as well
+        try:
+            script_filename = f"video_script_{content_id}.txt"
+            script_bucket_path = bhiv_bucket.save_script(script_content.encode('utf-8'), script_filename)
+            print(f"Script saved to bucket: {script_bucket_path}")
+            
+            # Save to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="INFO",
+                    message=f"Script saved to bucket: {script_bucket_path}",
+                    module="video_generation",
+                    user_id=current_user.user_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save system log: {log_error}")
+        except Exception as bucket_error:
+            print(f"Failed to save script to bucket: {bucket_error}")
+            
+            # Save warning to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="WARNING",
+                    message=f"Failed to save script to bucket: {str(bucket_error)}",
+                    module="video_generation",
+                    user_id=current_user.user_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save warning log: {log_error}")
+        
+    except Exception as e:
+        import logging
+        logging.error(f"Database save failed: {e}")
+        print(f"Database save failed: {e}")
+        
+        # Save error to system logs
+        try:
+            from core.database import DatabaseManager
+            DatabaseManager.save_system_log(
+                level="ERROR",
+                message=f"Video generation database save failed: {str(e)}",
+                module="video_generation",
+                user_id=current_user.user_id
+            )
+        except Exception as log_error:
+            print(f"Failed to save error log: {log_error}")
+
+    # Track successful video generation
+    try:
+        from .observability import track_event
+        track_event(current_user.user_id, "video_generation_completed", {
+            "content_id": content_id,
+            "total_scenes": len(sentences),
+            "total_duration": frame_duration * len(sentences)
+        })
     except Exception:
         pass
-
+    
     return VideoGenerationResponse(
         content_id=content_id,
         video_path=f"/download/{content_id}",
@@ -1070,10 +1525,24 @@ def stream_video(content_id: str, request: Request, range_request: Optional[str]
 # Removed FeedbackIn - using FeedbackRequest from models.py
 
 @step5_router.post('/feedback', response_model=FeedbackResponse, status_code=201)
+@track_performance("feedback_submission")
+@track_user_action("submit_feedback")
 async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user)):
     """STEP 5A: Submit feedback to train RL agent (requires authentication)"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    
+    # Track feedback submission with observability
+    try:
+        from .observability import track_event, set_user_context
+        set_user_context(current_user.user_id, current_user.username)
+        track_event(current_user.user_id, "feedback_submitted", {
+            "content_id": f.content_id,
+            "rating": f.rating,
+            "has_comment": bool(f.comment)
+        })
+    except Exception:
+        pass
     
     try:
         if not (1 <= f.rating <= 5):
@@ -1096,6 +1565,7 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
                 'content_id': f.content_id,
                 'user_id': user_id,
                 'event_type': event_type,
+                'watch_time_ms': 0,
                 'rating': f.rating,
                 'comment': f.comment,
                 'reward': reward,
@@ -1103,7 +1573,7 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
             }
             db.create_feedback(feedback_data)
             
-            # Save rating to bucket/ratings/
+            # Always save rating to bucket as backup
             rating_data = {
                 'content_id': f.content_id,
                 'user_id': user_id,
@@ -1119,14 +1589,78 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
                 bhiv_bucket.save_rating(rating_data, rating_filename)
                 import logging
                 logging.info(f"Rating saved to bucket: {rating_filename}")
+                
+                # Save to system logs
+                try:
+                    DatabaseManager.save_system_log(
+                        level="INFO",
+                        message=f"Feedback processed successfully: {f.content_id} - Rating: {f.rating}",
+                        module="feedback",
+                        user_id=user_id
+                    )
+                except Exception as log_error:
+                    print(f"Failed to save system log: {log_error}")
             except Exception as rating_error:
                 import logging
                 logging.warning(f"Failed to save rating to bucket: {rating_error}")
                 
+                # Save warning to system logs
+                try:
+                    from core.database import DatabaseManager
+                    DatabaseManager.save_system_log(
+                        level="WARNING",
+                        message=f"Failed to save rating to bucket: {str(rating_error)}",
+                        module="feedback",
+                        user_id=user_id
+                    )
+                except Exception as log_error:
+                    print(f"Failed to save warning log: {log_error}")
+                
         except Exception as db_error:
             import logging
-            logging.error(f"Feedback save failed: {db_error}")
-            raise HTTPException(status_code=500, detail=f"Feedback save failed: {str(db_error)}")
+            logging.error(f"Supabase feedback save failed: {db_error}")
+            
+            # Save error to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="ERROR",
+                    message=f"Feedback save to Supabase failed: {str(db_error)}",
+                    module="feedback",
+                    user_id=user_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save error log: {log_error}")
+            
+            # Fallback to SQLite
+            try:
+                import sqlite3
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    cur.execute('''
+                        INSERT INTO feedback (content_id, user_id, event_type, watch_time_ms, reward, rating, comment, timestamp)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    ''', (
+                        f.content_id, user_id, event_type, 0, reward, f.rating, f.comment, timestamp
+                    ))
+                conn.close()
+                logging.info("Feedback saved to SQLite fallback")
+                
+                # Save to system logs
+                try:
+                    from core.database import DatabaseManager
+                    DatabaseManager.save_system_log(
+                        level="INFO",
+                        message=f"Feedback saved to SQLite fallback: {f.content_id} - Rating: {f.rating}",
+                        module="feedback",
+                        user_id=user_id
+                    )
+                except Exception as log_error:
+                    print(f"Failed to save system log: {log_error}")
+            except Exception as sqlite_error:
+                logging.error(f"SQLite fallback also failed: {sqlite_error}")
+                raise HTTPException(status_code=500, detail=f"Feedback save failed: {str(db_error)}")
         
         # Train RL agent with the feedback
         try:
@@ -1155,6 +1689,15 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
                 bhiv_bucket.save_json('logs', rl_log_filename, rl_log_data)
                 import logging
                 logging.info(f"RL training log saved: {rl_log_filename}")
+                
+                # Save to system logs
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="INFO",
+                    message=f"RL agent trained successfully for content: {f.content_id}",
+                    module="rl_agent",
+                    user_id=user_id
+                )
             except Exception as log_error:
                 import logging
                 logging.warning(f"Failed to save RL training log: {log_error}")
@@ -1178,6 +1721,18 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
             import logging
             logging.warning(f"RL agent training failed: {rl_error}")
             
+            # Save warning to system logs
+            try:
+                from core.database import DatabaseManager
+                DatabaseManager.save_system_log(
+                    level="WARNING",
+                    message=f"RL agent training failed: {str(rl_error)}",
+                    module="rl_agent",
+                    user_id=user_id
+                )
+            except Exception as log_error:
+                print(f"Failed to save warning log: {log_error}")
+            
             return {
                 'status': 'success',
                 'rating': f.rating,
@@ -1194,6 +1749,7 @@ async def feedback(f: FeedbackRequest, current_user = Depends(get_current_user))
         raise HTTPException(status_code=500, detail=str(e))
 
 @step5_router.get('/recommend-tags/{content_id}', response_model=TagRecommendationResponse)
+@track_performance("tag_recommendation")
 def recommend_tags(content_id: str, current_user = Depends(get_current_user)):
     """STEP 5B: Get AI-powered tag recommendations using Q-Learning agent (authentication optional for personalization)"""
     try:
@@ -1521,7 +2077,7 @@ def get_storyboard_stats(current_user = Depends(get_current_user)):
 
 @step6_router.get('/ingest/webhook')
 def webhook_ingest_get(current_user = Depends(get_current_user)):
-    """STEP 6I: Webhook ingestion endpoint info (authentication optional)"""
+    """STEP 6L: Webhook ingestion endpoint info (authentication optional)"""
     return {
         'endpoint': '/ingest/webhook',
         'method': 'POST',
@@ -1531,7 +2087,7 @@ def webhook_ingest_get(current_user = Depends(get_current_user)):
 
 @step6_router.post('/ingest/webhook')
 async def webhook_ingest_post(request: Request, current_user = Depends(get_current_user)):
-    """STEP 6J: Webhook endpoint for external content ingestion (authentication optional)"""
+    """STEP 6K: Webhook endpoint for external content ingestion (authentication optional)"""
     try:
         payload = await request.json()
         result = await bhiv_core.process_webhook_ingest(payload=payload, source='webhook_api')
@@ -1674,6 +2230,45 @@ def get_bhiv_analytics(current_user = Depends(get_current_user)):
             'total_feedback': 0,
             'average_rating': 0.0,
             'sentiment_breakdown': {},
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+@step6_router.get('/observability/health')
+def get_observability_health_endpoint(current_user = Depends(get_current_user)):
+    """STEP 6I: Get observability system health status (authentication optional)"""
+    try:
+        from .observability import get_observability_health, performance_monitor
+        
+        health_status = get_observability_health()
+        performance_summary = performance_monitor.get_performance_summary()
+        
+        return {
+            'observability_health': health_status,
+            'performance_metrics': performance_summary,
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S'),
+            'status': 'healthy' if health_status['sentry']['enabled'] or health_status['posthog']['enabled'] else 'limited'
+        }
+    except Exception as e:
+        return {
+            'error': str(e),
+            'observability_health': {'status': 'error'},
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+
+@step6_router.get('/observability/performance')
+def get_performance_metrics(current_user = Depends(get_current_user)):
+    """STEP 6J: Get detailed performance metrics (authentication optional)"""
+    try:
+        from .observability import performance_monitor
+        
+        return {
+            'performance_summary': performance_monitor.get_performance_summary(),
+            'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+    except Exception as e:
+        return {
+            'error': str(e),
+            'performance_summary': {'metrics': {}, 'slow_operations_count': 0},
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
