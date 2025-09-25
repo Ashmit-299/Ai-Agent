@@ -45,16 +45,7 @@ jobs:
       run: |
         # Test migration system
         python run_migrations.py upgrade
-        python -c "
-import sys
-sys.path.append('.')
-from core.models import engine
-from sqlalchemy import text
-conn = engine.connect()
-result = conn.execute(text('SELECT 1'))
-print('Migration test successful - Database connected')
-conn.close()
-"
+        python -c "import sys; sys.path.append('.'); from core.models import engine; from sqlalchemy import text; conn = engine.connect(); result = conn.execute(text('SELECT 1')); print('Migration test successful - Database connected'); conn.close()"
     
     - name: Run tests
       env:
