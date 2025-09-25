@@ -1,7 +1,7 @@
 import os
 from dotenv import load_dotenv
 
-# Load environment variables
+# Load environment variables - v1.0.1 metrics fix
 load_dotenv()
 
 # Fix psycopg2 import issue
