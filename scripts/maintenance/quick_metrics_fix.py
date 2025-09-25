@@ -38,7 +38,7 @@ def test_direct_queries():
             
             # Now test the DatabaseManager method
             print("\nTesting DatabaseManager...")
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             analytics = DatabaseManager.get_analytics_data()
             print(f"DatabaseManager result: {analytics}")
             

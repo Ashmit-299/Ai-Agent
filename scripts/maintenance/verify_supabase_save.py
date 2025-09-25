@@ -19,7 +19,7 @@ sys.path.append(os.path.dirname(__file__))
 def simulate_video_generation():
     """Simulate the video generation process"""
     try:
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         from core import bhiv_bucket
         
         print("Simulating video generation process...")
@@ -141,7 +141,7 @@ def simulate_video_generation():
 def verify_data_in_supabase():
     """Verify the data was saved to Supabase"""
     try:
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         
         print("\\nVerifying data in Supabase...")
         db = DatabaseManager()

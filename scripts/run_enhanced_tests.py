@@ -31,7 +31,7 @@ def run_unit_tests():
     
     # Test database connection
     try:
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         db = DatabaseManager()
         print("SUCCESS: Database connection test passed")
     except Exception as e:
@@ -39,7 +39,7 @@ def run_unit_tests():
     
     # Test authentication
     try:
-        from app.auth import verify_token
+        from ..app.auth import verify_token
         try:
             verify_token("invalid_token")
         except:
@@ -56,7 +56,7 @@ def run_integration_tests():
     
     try:
         from fastapi.testclient import TestClient
-        from app.main import app
+        from ..app.main import app
         
         client = TestClient(app)
         
@@ -104,7 +104,7 @@ def test_security_enhancements():
     
     try:
         from fastapi.testclient import TestClient
-        from app.main import app
+        from ..app.main import app
         
         client = TestClient(app)
         

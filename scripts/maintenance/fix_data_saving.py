@@ -15,7 +15,7 @@ def create_missing_tables():
     
     try:
         # Try Supabase first
-        from core.database import engine
+        from ..core.database import engine
         from sqlmodel import text
         
         print("Creating missing tables in Supabase...")
@@ -139,7 +139,7 @@ def test_data_saving():
         print("[OK] Bucket saving working")
         
         # Test database saving
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         db = DatabaseManager()
         
         # Test script saving

@@ -20,9 +20,9 @@ def test_registration_components():
     
     try:
         print("1. Testing imports...")
-        from app.models import UserRegister
-        from app.security import PasswordManager, JWTManager, InputSanitizer
-        from core.database import DatabaseManager
+        from ..app.models import UserRegister
+        from ..app.security import PasswordManager, JWTManager, InputSanitizer
+        from ..core.database import DatabaseManager
         print("[OK] Imports successful")
         
         print("\n2. Testing user data validation...")
@@ -89,8 +89,8 @@ def test_full_registration():
     
     try:
         from fastapi import Request
-        from app.auth import register_user
-        from app.models import UserRegister
+        from ..app.auth import register_user
+        from ..app.models import UserRegister
         
         # Create mock request
         class MockRequest:

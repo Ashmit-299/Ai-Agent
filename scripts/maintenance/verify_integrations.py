@@ -15,7 +15,7 @@ def test_sentry_integration():
     print("\n=== SENTRY INTEGRATION TEST ===")
     
     try:
-        from app.observability import sentry_manager
+        from ..app.observability import sentry_manager
         
         if not sentry_manager.initialized:
             print("FAIL: Sentry not initialized")
@@ -81,7 +81,7 @@ def test_posthog_integration():
     print("\n=== POSTHOG INTEGRATION TEST ===")
     
     try:
-        from app.observability import posthog_manager
+        from ..app.observability import posthog_manager
         
         if not posthog_manager.initialized:
             print("FAIL: PostHog not initialized")
@@ -168,7 +168,7 @@ def test_performance_monitoring():
     print("\n=== PERFORMANCE MONITORING TEST ===")
     
     try:
-        from app.observability import performance_monitor
+        from ..app.observability import performance_monitor
         
         # Test operation measurement
         with performance_monitor.measure_operation("test_database_query", "test_user_123"):

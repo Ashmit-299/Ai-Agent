@@ -4,8 +4,8 @@ Fix demo user password with proper bcrypt hashing
 """
 
 import time
-from core.database import DatabaseManager
-from app.security import PasswordManager
+from ..core.database import DatabaseManager
+from ..app.security import PasswordManager
 
 def fix_demo_password():
     """Fix demo user password with proper bcrypt hash"""
@@ -20,8 +20,8 @@ def fix_demo_password():
         # Update in Supabase database
         try:
             from sqlmodel import Session, select, update
-            from core.models import User
-            from core.database import engine
+            from ..core.models import User
+            from ..core.database import engine
             
             with Session(engine) as session:
                 # Find demo user

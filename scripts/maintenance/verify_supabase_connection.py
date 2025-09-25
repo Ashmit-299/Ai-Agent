@@ -77,7 +77,7 @@ def test_endpoints_with_supabase():
 def create_test_content():
     """Create test content in Supabase to verify data flow"""
     try:
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         import uuid
         
         db = DatabaseManager()

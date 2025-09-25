@@ -16,9 +16,9 @@ def run_basic_tests():
     # Test 1: Import core modules
     tests_total += 1
     try:
-        from core.database import get_session, DatabaseManager
-        from core.bhiv_bucket import save_text, init_bucket
-        from app.main import app
+        from ..core.database import get_session, DatabaseManager
+        from ..core.bhiv_bucket import save_text, init_bucket
+        from ..app.main import app
         print("[PASS] Core module imports")
         tests_passed += 1
     except Exception as e:

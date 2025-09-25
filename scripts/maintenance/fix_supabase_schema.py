@@ -12,7 +12,7 @@ def fix_supabase_schema():
     """Ensure Supabase tables have correct structure"""
     
     try:
-        from core.database import engine
+        from ..core.database import engine
         from sqlmodel import text
         
         print("Connecting to Supabase...")

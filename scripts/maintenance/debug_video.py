@@ -1,4 +1,4 @@
-from video.generator import create_multi_frame_video
+from ..video.generator import create_multi_frame_video
 import os
 
 script = '''Title: Introduction to Linear Regression

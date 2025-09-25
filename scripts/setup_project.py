@@ -71,7 +71,7 @@ BHIV_LM_API_KEY=demo_api_key_123
 def create_database():
     """Initialize database"""
     try:
-        from core.database import create_db_and_tables
+        from ..core.database import create_db_and_tables
         create_db_and_tables()
         print("✓ Database initialized")
     except Exception as e:

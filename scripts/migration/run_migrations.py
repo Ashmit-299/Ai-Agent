@@ -67,7 +67,7 @@ class MigrationManager:
     def create_tables_if_not_exist(self):
         """Create tables using SQLModel if no migrations exist"""
         try:
-            from core.database import engine
+            from ..core.database import engine
             SQLModel.metadata.create_all(engine)
             logger.info("✅ Created tables using SQLModel")
             return True

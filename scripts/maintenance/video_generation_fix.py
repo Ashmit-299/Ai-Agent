@@ -32,7 +32,7 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             
             # Save script to database
             script_id = f"script_{uuid.uuid4().hex[:12]}"
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             db = DatabaseManager()
             script_data = {
                 'script_id': script_id,
@@ -109,7 +109,7 @@ async def generate_video(file: UploadFile = File(...), title: str = Form(...), c
             video_bucket_path = bhiv_bucket.get_bucket_path('videos', video_filename)
             
             # Generate video using video generator
-            from video.generator import create_simple_video
+            from ..video.generator import create_simple_video
             video_path = create_simple_video(script_content, video_bucket_path, duration=storyboard_data.get('total_duration', 10.0))
             
             if not os.path.exists(video_path):

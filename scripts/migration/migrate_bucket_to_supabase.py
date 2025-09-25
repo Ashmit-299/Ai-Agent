@@ -10,8 +10,8 @@ import time
 import uuid
 from pathlib import Path
 from sqlmodel import Session
-from core.database import engine
-from core.models import User, Content, Feedback
+from ..core.database import engine
+from ..core.models import User, Content, Feedback
 
 def migrate_bucket_data():
     """Migrate all files from bucket to Supabase"""

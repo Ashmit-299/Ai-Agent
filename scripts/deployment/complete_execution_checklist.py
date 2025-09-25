@@ -171,7 +171,7 @@ class ExecutionValidator:
         # Check database connection
         db_connected = False
         try:
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             db = DatabaseManager()
             with db.engine.connect() as conn:
                 from sqlalchemy import text

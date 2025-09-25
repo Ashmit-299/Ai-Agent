@@ -101,21 +101,125 @@ text
 
 ## Project Structure
 
+```
 ai-agent/
-├── app/ # FastAPI API, routes, models, security, main app
-├── core/ # Core logic: DB, orchestration, RL, storage
-├── video/ # Pipelines: storyboard, generation, error cases
-├── scripts/ # Deploy, migration, health check/util scripts
-├── docker/ # Docker Compose, Dockerfiles
-├── migrations/ # Alembic migrations
-├── tests/ # pytest: unit & integration
-├── .github/ # CI/CD workflows
-├── docs/ # Top-level technical docs and diagrams
-├── requirements.txt
-├── README.md
-├── .env.example
-
-text
+├── 📁 ROOT CONFIGURATION
+│   ├── .env.example                    # Environment variables template
+│   ├── .gitignore                      # Git ignore rules
+│   ├── .python-version                 # Python version specification
+│   ├── agent_state.json                # Agent state persistence
+│   ├── alembic.ini                     # Database migration config
+│   ├── Dockerfile                      # Production container
+│   ├── LICENSE                         # MIT license
+│   ├── pytest.ini                     # Test configuration
+│   ├── README.md                       # Project documentation
+│   ├── render.yaml                     # Deployment configuration
+│   ├── requirements.txt                # Python dependencies
+│   └── runtime.txt                     # Runtime specification
+│
+├── 📁 app/                             # FastAPI Application
+│   ├── __init__.py
+│   ├── main.py                         # FastAPI main application
+│   ├── routes.py                       # API route definitions
+│   ├── models.py                       # Pydantic models
+│   ├── auth.py                         # Authentication system
+│   ├── security.py                     # Security utilities
+│   ├── agent.py                        # AI agent logic
+│   ├── observability.py                # Monitoring integration
+│   ├── streaming_metrics.py            # Streaming analytics
+│   ├── task_queue.py                   # Background tasks
+│   ├── streamlit_dashboard.py          # Dashboard interface
+│   └── templates/                      # HTML templates
+│
+├── 📁 core/                            # Core Business Logic
+│   ├── __init__.py
+│   ├── database.py                     # Database management
+│   ├── models.py                       # SQLModel database models
+│   ├── bhiv_bucket.py                  # Storage system
+│   ├── bhiv_core.py                    # Core functionality
+│   ├── bhiv_lm_client.py               # Language model client
+│   └── sentiment_analyzer.py           # Sentiment analysis
+│
+├── 📁 video/                           # Video Generation Pipeline
+│   ├── __init__.py
+│   ├── generator.py                    # Video generation logic
+│   ├── storyboard.py                   # Storyboard creation
+│   └── failed_cases.py                 # Error handling
+│
+├── 📁 scripts/                         # Utility Scripts
+│   ├── __init__.py
+│   ├── start_server.py                 # Server startup
+│   ├── start_dashboard.py              # Dashboard startup
+│   ├── setup_project.py                # Project setup
+│   ├── health-check.py                 # Health monitoring
+│   ├── maintenance/                    # Maintenance scripts
+│   │   ├── debug_*.py                  # Debug utilities
+│   │   ├── fix_*.py                    # Fix scripts
+│   │   ├── verify_*.py                 # Verification tools
+│   │   └── test_*.py                   # Test utilities
+│   ├── deployment/                     # Deployment scripts
+│   │   ├── deploy.py                   # Deployment automation
+│   │   ├── build.sh                    # Build scripts
+│   │   └── force_deployment.py         # Force deployment
+│   └── migration/                      # Database migrations
+│       ├── run_migrations.py           # Migration runner
+│       └── migrate_*.py                # Migration scripts
+│
+├── 📁 tests/                           # Test Suite
+│   ├── __init__.py
+│   ├── conftest.py                     # pytest configuration
+│   ├── integration/                    # Integration tests
+│   │   ├── test_auth_flow.py           # Authentication tests
+│   │   ├── test_supabase.py            # Database tests
+│   │   └── test_demo_login.py          # Demo functionality
+│   ├── unit/                          # Unit tests
+│   │   ├── test_database.py            # Database unit tests
+│   │   ├── test_observability.py       # Monitoring tests
+│   │   └── test_*.py                   # Component tests
+│   └── fixtures/                      # Test fixtures
+│       ├── test_output.txt             # Test data
+│       └── test_user_credentials.json  # Test credentials
+│
+├── 📁 docs/                            # Documentation
+│   ├── __init__.py
+│   ├── endpoint_security_guide.md      # Security documentation
+│   ├── testing_instructions.md         # Testing guide
+│   ├── deployment/                     # Deployment docs
+│   │   └── render_deploy.md            # Render deployment
+│   └── reports/                       # Generated reports
+│       ├── DEPLOYMENT_GUIDE.md         # Deployment reports
+│       ├── TEST_SUMMARY.md             # Test reports
+│       └── *.md                       # Various reports
+│
+├── 📁 data/                            # Data Files
+│   ├── __init__.py
+│   ├── data.db-*                       # SQLite database files
+│   └── reports/                       # Data reports
+│       ├── health-check-*.json         # Health check reports
+│       └── *.json                     # Various data reports
+│
+├── 📁 migrations/                      # Database Migrations
+│   ├── README                          # Migration instructions
+│   ├── env.py                          # Alembic environment
+│   ├── script.py.mako                  # Migration template
+│   └── versions/                      # Migration versions
+│
+├── 📁 .github/                         # CI/CD Workflows
+│   └── workflows/
+│       └── ci-cd-production.yml        # GitHub Actions
+│
+├── 📁 docker/                          # Container Configuration
+│   └── docker-compose.yml              # Docker setup
+│
+├── 📁 bucket/                          # Local Storage
+│   ├── logs/                           # Application logs
+│   ├── ratings/                        # User ratings
+│   ├── scripts/                        # Stored scripts
+│   └── storyboards/                    # Generated storyboards
+│
+└── 📁 uploads/                         # File uploads
+    └── (uploaded content files)
+```
 
 ---
 
@@ -144,8 +248,8 @@ text
 
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-username/Ai-Agent-main.git
-cd Ai-Agent-main
+git clone https://github.com/Ashmit-299/Ai-Agent.git
+cd Ai-Agent
 
 # 2. Create virtual environment
 python -m venv venv
@@ -163,10 +267,10 @@ cp .env.example .env
 python -c "from core.database import create_db_and_tables; create_db_and_tables()"
 
 # 6. Start API server
-python start_server.py
+python scripts/start_server.py
 
 # 7. Start Streamlit dashboard (optional)
-python start_dashboard.py
+python scripts/start_dashboard.py
 ```
 
 #### Docker Deployment
@@ -212,22 +316,22 @@ text
 
 Apply migrations (any environment):
 
-python run_migrations.py upgrade
+python scripts/migration/run_migrations.py upgrade
 
 text
 
 - Create DB schema (dev only):  
   `python -c "from core.database import create_db_and_tables; create_db_and_tables()"`
 - Rollback (optional):  
-  `python run_migrations.py rollback <revision>`
+  `python scripts/migration/run_migrations.py rollback <revision>`
 
 ---
 
 ## Testing & Quality
 
-pytest # all tests
-pytest tests/unit/
-pytest tests/integration/
+python scripts/run_tests.py  # all tests
+pytest tests/unit/           # unit tests only
+pytest tests/integration/    # integration tests only
 
 text
 

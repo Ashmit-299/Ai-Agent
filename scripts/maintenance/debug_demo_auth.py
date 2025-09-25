@@ -4,8 +4,8 @@ Debug demo authentication issue
 """
 
 import time
-from core.database import DatabaseManager
-from app.security import PasswordManager
+from ..core.database import DatabaseManager
+from ..app.security import PasswordManager
 
 def debug_demo_auth():
     """Debug demo authentication step by step"""
@@ -48,7 +48,7 @@ def debug_demo_auth():
     # Step 3: Test JWT token creation
     print("\n3. Testing JWT token creation...")
     try:
-        from app.security import JWTManager
+        from ..app.security import JWTManager
         
         token_data = {"sub": user.username, "user_id": user.user_id}
         access_token = JWTManager.create_access_token(token_data)
@@ -69,7 +69,7 @@ def debug_demo_auth():
     print("\n4. Testing full login flow...")
     try:
         from fastapi.security import OAuth2PasswordRequestForm
-        from app.auth import login_user
+        from ..app.auth import login_user
         from fastapi import Request
         
         # Create mock request

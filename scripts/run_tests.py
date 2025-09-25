@@ -17,7 +17,7 @@ def run_unit_tests():
     # Test bucket functionality
     try:
         from tests.unit.test_bhiv_bucket import test_get_bucket_path
-        from core.bhiv_bucket import get_bucket_path
+        from ..core.bhiv_bucket import get_bucket_path
         
         # Simple bucket test
         path = get_bucket_path("scripts", "test.txt")
@@ -28,7 +28,7 @@ def run_unit_tests():
     
     # Test video generator
     try:
-        from video.generator import create_simple_video
+        from ..video.generator import create_simple_video
         import tempfile
         
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -41,7 +41,7 @@ def run_unit_tests():
     
     # Test LM client fallback
     try:
-        from core.bhiv_lm_client import get_llm_config
+        from ..core.bhiv_lm_client import get_llm_config
         config = get_llm_config()
         assert isinstance(config, dict)
         print("[OK] LM client test passed")
@@ -54,7 +54,7 @@ def run_integration_tests():
     
     # Test database connection
     try:
-        from core.database import engine
+        from ..core.database import engine
         with engine.connect() as conn:
             result = conn.execute("SELECT 1")
             assert result.fetchone()[0] == 1
@@ -64,7 +64,7 @@ def run_integration_tests():
     
     # Test authentication configuration
     try:
-        from app.auth import PUB_KEY, ALG
+        from ..app.auth import PUB_KEY, ALG
         assert PUB_KEY is not None
         assert ALG == "RS256"
         print("[OK] Authentication config test passed")

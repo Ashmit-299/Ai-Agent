@@ -51,7 +51,7 @@ def test_analytics_query():
             # Test the DatabaseManager method
             print("\nTesting DatabaseManager.get_analytics_data()...")
             sys.path.append('.')
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             
             analytics = DatabaseManager.get_analytics_data()
             print(f"Analytics result: {analytics}")

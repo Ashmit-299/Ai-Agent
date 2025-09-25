@@ -26,7 +26,7 @@ class TestUserInviter:
         
     def create_test_user(self, username, email, role="user"):
         """Create a test user with credentials"""
-        from app.security import hash_password
+        from ..app.security import hash_password
         
         user_id = f"test_{uuid.uuid4().hex[:8]}"
         password = f"test{username}123"
@@ -48,7 +48,7 @@ class TestUserInviter:
     def save_to_database(self, user_data):
         """Save user to database"""
         try:
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             db = DatabaseManager()
             
             # Check if user already exists
@@ -245,9 +245,9 @@ Generated on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
     def cleanup_existing_test_users(self):
         """Remove existing test users"""
         try:
-            from core.database import DatabaseManager
+            from ..core.database import DatabaseManager
             from sqlmodel import Session, select, delete
-            from core.models import User
+            from ..core.models import User
             
             db = DatabaseManager()
             

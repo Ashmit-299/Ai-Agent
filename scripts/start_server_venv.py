@@ -54,7 +54,7 @@ async def test_async_functionality():
         print(f"  ✅ LM client: {result.get('generation_method', 'working')}")
         
         # Test database
-        from core.database import DatabaseManager
+        from ..core.database import DatabaseManager
         db = DatabaseManager()
         analytics = db.get_analytics_data()
         print(f"  ✅ Database: {len(analytics)} metrics")
@@ -93,8 +93,8 @@ def main():
     print("\n📦 Testing imports...")
     try:
         sys.path.append('.')
-        from app.main import app
-        from app.routes import router
+        from ..app.main import app
+        from ..app.routes import router
         print(f"  ✅ FastAPI app ({len(router.routes)} endpoints)")
     except Exception as e:
         print(f"  ❌ Import failed: {e}")

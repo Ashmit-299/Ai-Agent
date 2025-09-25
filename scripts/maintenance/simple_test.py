@@ -77,8 +77,8 @@ def test_bucket_functionality():
 def test_database_functionality():
     """Test database functionality"""
     try:
-        from core.database import DatabaseManager
-        from core.models import create_db_and_tables
+        from ..core.database import DatabaseManager
+        from ..core.models import create_db_and_tables
         
         print("Testing database functionality...")
         

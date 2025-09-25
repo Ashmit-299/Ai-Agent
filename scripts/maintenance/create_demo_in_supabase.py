@@ -4,8 +4,8 @@ Create demo user in main Supabase database
 """
 
 import time
-from core.database import DatabaseManager
-from app.security import PasswordManager
+from ..core.database import DatabaseManager
+from ..app.security import PasswordManager
 
 def create_demo_in_supabase():
     """Create demo user in main Supabase database"""
