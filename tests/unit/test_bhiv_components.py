@@ -52,13 +52,13 @@ class TestBHIVComponentsEnhanced:
 
     def test_auth_token_validation_edge_cases(self):
         """Test authentication edge cases"""
-        from app.auth import verify_token
+        from app.security import JWTManager
         
         with pytest.raises(Exception):
-            verify_token("invalid_token")
+            JWTManager.verify_token("invalid_token")
         
         with pytest.raises(Exception):
-            verify_token("")
+            JWTManager.verify_token("")
 
     def test_database_connection_resilience(self):
         """Test database connection error handling"""

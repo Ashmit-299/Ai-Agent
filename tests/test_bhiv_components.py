@@ -200,12 +200,12 @@ class TestBHIVComponents:
                 user_data = {
                     "user_id": "user123",
                     "username": "testuser",
-                    "password_hash": auth.hash_password("password123"),
+                    "password_hash": auth.PasswordManager.hash_password("password123"),
                     "email": "test@example.com"
                 }
                 
                 # Test password hashing integration
-                hashed = auth.hash_password("password123")
+                hashed = auth.PasswordManager.hash_password("password123")
                 assert auth.verify_password("password123", hashed) == True
                 assert auth.verify_password("wrongpassword", hashed) == False
 

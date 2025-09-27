@@ -11,23 +11,23 @@ def test_streamlit_import():
     try:
         import streamlit
         print("[PASS] Streamlit import successful")
-        return True
+        assert True
     except ImportError as e:
         print(f"[FAIL] Streamlit import failed: {e}")
-        return False
+        assert False
 
 def test_dashboard_import():
     """Test dashboard module import"""
     try:
         import streamlit_dashboard
         print("[PASS] Dashboard module import successful")
-        return True
+        assert True
     except ImportError as e:
         print(f"[FAIL] Dashboard module import failed: {e}")
-        return False
+        assert False
     except Exception as e:
         print(f"[WARN] Dashboard module has issues but imports: {e}")
-        return True
+        assert True
 
 def main():
     """Run streamlit tests"""

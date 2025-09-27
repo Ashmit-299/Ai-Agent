@@ -250,14 +250,18 @@ class TestAuthSecurity:
         """Test Token model"""
         token_data = {
             "access_token": "jwt_token_here",
+            "refresh_token": "refresh_token_here",
             "token_type": "bearer",
+            "expires_in": 1440,
             "user_id": "user123",
             "username": "testuser"
         }
         token = Token(**token_data)
         
         assert token.access_token == "jwt_token_here"
+        assert token.refresh_token == "refresh_token_here"
         assert token.token_type == "bearer"
+        assert token.expires_in == 1440
         assert token.user_id == "user123"
         assert token.username == "testuser"
 
