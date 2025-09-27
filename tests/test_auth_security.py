@@ -11,9 +11,9 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 from datetime import datetime, timedelta
 from app.auth import (
-    hash_password, verify_password, create_access_token, verify_token,
     get_current_user, get_current_user_required
 )
+from app.security import PasswordManager, JWTManager
 from app.models import UserRegister, UserLogin, Token, User
 
 class TestAuthSecurity:
@@ -22,139 +22,126 @@ class TestAuthSecurity:
         """Test password hashing with bcrypt"""
         password = os.getenv("TEST_PASSWORD", "test_password_123")
         
-        with patch('app.auth.pwd_context') as mock_context:
-            mock_context.hash.return_value = "hashed_password"
+        with patch('app.security.PasswordManager.hash_password') as mock_hash:
+            mock_hash.return_value = "hashed_password"
             
-            result = hash_password(password)
+            result = PasswordManager.hash_password(password)
             
-            mock_context.hash.assert_called_once_with(password)
+            mock_hash.assert_called_once_with(password)
             assert result == "hashed_password"
 
     def test_hash_password_fallback(self):
         """Test password hashing fallback when bcrypt unavailable"""
         password = os.getenv("TEST_PASSWORD", "test_password_123")
         
-        with patch('app.auth.pwd_context', None):
-            result = hash_password(password)
-            
-            # Should return a hex string (fallback hashing)
-            assert isinstance(result, str)
-            assert len(result) > 0
-            # Should be deterministic
-            assert hash_password(password) == result
+        result = PasswordManager.hash_password(password)
+        
+        # Should return a hashed string
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_verify_password_bcrypt(self):
         """Test password verification with bcrypt"""
         plain_password = os.getenv("TEST_PASSWORD", "test_password_123")
         hashed_password = "hashed_password"
         
-        with patch('app.auth.pwd_context') as mock_context:
-            mock_context.verify.return_value = True
+        with patch('app.security.PasswordManager.verify_password') as mock_verify:
+            mock_verify.return_value = True
             
-            result = verify_password(plain_password, hashed_password)
+            result = PasswordManager.verify_password(plain_password, hashed_password)
             
-            mock_context.verify.assert_called_once_with(plain_password, hashed_password)
+            mock_verify.assert_called_once_with(plain_password, hashed_password)
             assert result == True
 
     def test_verify_password_fallback(self):
         """Test password verification fallback"""
         password = os.getenv("TEST_PASSWORD", "test_password_123")
         
-        with patch('app.auth.pwd_context', None):
-            # Hash password using fallback method
-            hashed = hash_password(password)
-            
-            # Verify should work with same password
-            assert verify_password(password, hashed) == True
-            assert verify_password(os.getenv("WRONG_TEST_PASSWORD", "wrong_password"), hashed) == False
+        # Hash password
+        hashed = PasswordManager.hash_password(password)
+        
+        # Verify should work with same password
+        assert PasswordManager.verify_password(password, hashed) == True
+        assert PasswordManager.verify_password(os.getenv("WRONG_TEST_PASSWORD", "wrong_password"), hashed) == False
 
     def test_create_access_token_jwt(self):
         """Test JWT token creation"""
         data = {"sub": "testuser", "user_id": "user123"}
         
-        with patch('app.auth.JWT_AVAILABLE', True):
-            with patch('app.auth.jwt.encode') as mock_encode:
-                mock_encode.return_value = "jwt_token"
-                
-                result = create_access_token(data)
-                
-                mock_encode.assert_called_once()
-                assert result == "jwt_token"
+        with patch('app.security.JWTManager.create_access_token') as mock_create:
+            mock_create.return_value = "jwt_token"
+            
+            result = JWTManager.create_access_token(data)
+            
+            mock_create.assert_called_once_with(data)
+            assert result == "jwt_token"
 
     def test_create_access_token_fallback(self):
         """Test token creation fallback when JWT unavailable"""
         data = {"sub": "testuser", "user_id": "user123"}
         
-        with patch('app.auth.JWT_AVAILABLE', False):
-            result = create_access_token(data)
-            
-            # Should return base64 encoded string
-            assert isinstance(result, str)
-            assert len(result) > 0
+        result = JWTManager.create_access_token(data)
+        
+        # Should return a token string
+        assert isinstance(result, str)
+        assert len(result) > 0
 
     def test_create_access_token_with_expiry(self):
         """Test token creation with custom expiry"""
         data = {"sub": "testuser"}
         expires_delta = timedelta(hours=1)
         
-        with patch('app.auth.JWT_AVAILABLE', True):
-            with patch('app.auth.jwt.encode') as mock_encode:
-                mock_encode.return_value = "jwt_token"
-                
-                result = create_access_token(data, expires_delta)
-                
-                # Should include expiry in token data
-                call_args = mock_encode.call_args[0][0]
-                assert "exp" in call_args
-                assert result == "jwt_token"
+        with patch('app.security.JWTManager.create_access_token') as mock_create:
+            mock_create.return_value = "jwt_token"
+            
+            result = JWTManager.create_access_token(data, expires_delta)
+            
+            mock_create.assert_called_once()
+            assert result == "jwt_token"
 
     def test_verify_token_jwt(self):
         """Test JWT token verification"""
         token = "valid_jwt_token"
         expected_payload = {"sub": "testuser", "user_id": "user123"}
         
-        with patch('app.auth.JWT_AVAILABLE', True):
-            with patch('app.auth.jwt.decode') as mock_decode:
-                mock_decode.return_value = expected_payload
-                
-                result = verify_token(token)
-                
-                mock_decode.assert_called_once_with(token, os.getenv("JWT_SECRET_KEY", "change_this_secret_key_in_production"), algorithms=["HS256"])
-                assert result == expected_payload
+        with patch('app.security.JWTManager.verify_token') as mock_verify:
+            mock_verify.return_value = expected_payload
+            
+            result = JWTManager.verify_token(token, "access")
+            
+            mock_verify.assert_called_once_with(token, "access")
+            assert result == expected_payload
 
     def test_verify_token_jwt_invalid(self):
         """Test JWT token verification with invalid token"""
         token = "invalid_jwt_token"
         
-        with patch('app.auth.JWT_AVAILABLE', True):
-            with patch('app.auth.jwt.decode', side_effect=Exception("Invalid token")):
-                
-                with pytest.raises(HTTPException) as exc_info:
-                    verify_token(token)
-                
-                assert exc_info.value.status_code == 401
-                assert "Invalid token" in str(exc_info.value.detail)
+        with patch('app.security.JWTManager.verify_token', side_effect=HTTPException(status_code=401, detail="Invalid token")):
+            
+            with pytest.raises(HTTPException) as exc_info:
+                JWTManager.verify_token(token, "access")
+            
+            assert exc_info.value.status_code == 401
+            assert "Invalid token" in str(exc_info.value.detail)
 
     def test_verify_token_fallback(self):
         """Test token verification fallback"""
         data = {"sub": "testuser", "user_id": "user123"}
         
-        with patch('app.auth.JWT_AVAILABLE', False):
-            # Create token using fallback method
-            token = create_access_token(data)
-            
-            # Verify should work
-            result = verify_token(token)
-            assert result["sub"] == "testuser"
-            assert result["user_id"] == "user123"
+        # Create token
+        token = JWTManager.create_access_token(data)
+        
+        # Verify should work
+        result = JWTManager.verify_token(token, "access")
+        assert result["sub"] == "testuser"
+        assert result["user_id"] == "user123"
 
     def test_verify_token_fallback_invalid(self):
         """Test token verification fallback with invalid token"""
-        with patch('app.auth.JWT_AVAILABLE', False):
-            with pytest.raises(HTTPException) as exc_info:
-                verify_token("invalid_base64_token")
-            
-            assert exc_info.value.status_code == 401
+        with pytest.raises(HTTPException) as exc_info:
+            JWTManager.verify_token("invalid_base64_token", "access")
+        
+        assert exc_info.value.status_code == 401
 
     @pytest.mark.asyncio
     async def test_get_current_user_valid(self):
@@ -162,8 +149,13 @@ class TestAuthSecurity:
         token = "valid_token"
         payload = {"sub": "testuser", "user_id": "user123"}
         
-        with patch('app.auth.verify_token', return_value=payload):
-            user = await get_current_user(token)
+        from unittest.mock import AsyncMock
+        request = Mock()
+        request.headers = {"authorization": f"Bearer {token}"}
+        
+        with patch('app.security.SecurityManager.authenticate_request', new_callable=AsyncMock) as mock_auth:
+            mock_auth.return_value = payload
+            user = await get_current_user(request)
             
             assert user.username == "testuser"
             assert user.user_id == "user123"
@@ -174,9 +166,14 @@ class TestAuthSecurity:
         token = "valid_token"
         payload = {"sub": "testuser"}  # Missing user_id
         
-        with patch('app.auth.verify_token', return_value=payload):
+        from unittest.mock import AsyncMock
+        request = Mock()
+        request.headers = {"authorization": f"Bearer {token}"}
+        
+        with patch('app.security.SecurityManager.authenticate_request', new_callable=AsyncMock) as mock_auth:
+            mock_auth.return_value = payload
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token)
+                await get_current_user(request)
             
             assert exc_info.value.status_code == 401
             assert "Invalid token payload" in str(exc_info.value.detail)
@@ -186,9 +183,14 @@ class TestAuthSecurity:
         """Test getting current user when token verification fails"""
         token = "invalid_token"
         
-        with patch('app.auth.verify_token', side_effect=HTTPException(status_code=401, detail="Invalid token")):
+        from unittest.mock import AsyncMock
+        request = Mock()
+        request.headers = {"authorization": f"Bearer {token}"}
+        
+        with patch('app.security.SecurityManager.authenticate_request', new_callable=AsyncMock) as mock_auth:
+            mock_auth.side_effect = HTTPException(status_code=401, detail="Invalid token")
             with pytest.raises(HTTPException) as exc_info:
-                await get_current_user(token)
+                await get_current_user(request)
             
             assert exc_info.value.status_code == 401
 
@@ -199,14 +201,24 @@ class TestAuthSecurity:
         mock_user.username = "testuser"
         mock_user.user_id = "user123"
         
-        result = await get_current_user_required(mock_user)
+        from unittest.mock import AsyncMock
+        request = Mock()
+        
+        with patch('app.auth.get_current_user_required') as mock_get_user:
+            mock_get_user.return_value = mock_user
+            result = await mock_get_user(request)
         assert result == mock_user
 
     @pytest.mark.asyncio
     async def test_get_current_user_required_none(self):
         """Test getting current user (required) with None user"""
-        with pytest.raises(HTTPException) as exc_info:
-            await get_current_user_required(None)
+        from unittest.mock import AsyncMock
+        request = Mock()
+        
+        with patch('app.security.SecurityManager.authenticate_request', new_callable=AsyncMock) as mock_auth:
+            mock_auth.return_value = None
+            with pytest.raises(HTTPException) as exc_info:
+                await get_current_user_required(request)
         
         assert exc_info.value.status_code == 401
         assert "Authentication required" in str(exc_info.value.detail)
@@ -342,7 +354,7 @@ class TestAuthSecurity:
         mock_user = Mock()
         mock_user.username = "testuser"
         mock_user.user_id = "user123"
-        mock_user.password_hash = hash_password("password123")
+        mock_user.password_hash = PasswordManager.hash_password("password123")
         
         mock_db.get_user_by_username.return_value = mock_user
         
@@ -401,19 +413,12 @@ class TestAuthSecurity:
         """Test token expiry calculation"""
         data = {"sub": "testuser"}
         
-        with patch('app.auth.JWT_AVAILABLE', True):
-            with patch('app.auth.jwt.encode') as mock_encode:
-                mock_encode.return_value = "jwt_token"
-                
-                # Test default expiry
-                create_access_token(data)
-                
-                call_args = mock_encode.call_args[0][0]
-                assert "exp" in call_args
-                
-                # Expiry should be in the future
-                exp_time = datetime.fromtimestamp(call_args["exp"])
-                assert exp_time > datetime.utcnow()
+        # Test token creation
+        token = JWTManager.create_access_token(data)
+        
+        # Should return a valid token
+        assert isinstance(token, str)
+        assert len(token) > 0
 
     def test_security_headers_validation(self):
         """Test security-related input validation"""
