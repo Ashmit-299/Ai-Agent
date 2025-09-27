@@ -28,7 +28,7 @@ def test_registration_components():
         print("\n2. Testing user data validation...")
         user_data = UserRegister(
             username="testuser123",
-            password="TestPassword123!",
+            password=os.getenv("TEST_PASSWORD", "TestPassword123!"),
             email="test@example.com"
         )
         print(f"[OK] User data: {user_data.username}")
@@ -103,7 +103,7 @@ def test_full_registration():
         # Create user data
         user_data = UserRegister(
             username=f"testuser_{int(time.time())}",
-            password="TestPassword123!",
+            password=os.getenv("TEST_PASSWORD", "TestPassword123!"),
             email="test@example.com"
         )
         

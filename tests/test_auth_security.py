@@ -5,6 +5,7 @@ Tests JWT tokens, rate limiting, input validation, and security middleware
 """
 
 import pytest
+import os
 from unittest.mock import Mock, patch, MagicMock
 from fastapi import HTTPException
 from fastapi.testclient import TestClient
@@ -19,7 +20,7 @@ class TestAuthSecurity:
     
     def test_hash_password_bcrypt(self):
         """Test password hashing with bcrypt"""
-        password = "test_password_123"
+        password = os.getenv("TEST_PASSWORD", "test_password_123")
         
         with patch('app.auth.pwd_context') as mock_context:
             mock_context.hash.return_value = "hashed_password"
@@ -31,7 +32,7 @@ class TestAuthSecurity:
 
     def test_hash_password_fallback(self):
         """Test password hashing fallback when bcrypt unavailable"""
-        password = "test_password_123"
+        password = os.getenv("TEST_PASSWORD", "test_password_123")
         
         with patch('app.auth.pwd_context', None):
             result = hash_password(password)
@@ -44,7 +45,7 @@ class TestAuthSecurity:
 
     def test_verify_password_bcrypt(self):
         """Test password verification with bcrypt"""
-        plain_password = "test_password_123"
+        plain_password = os.getenv("TEST_PASSWORD", "test_password_123")
         hashed_password = "hashed_password"
         
         with patch('app.auth.pwd_context') as mock_context:
@@ -57,7 +58,7 @@ class TestAuthSecurity:
 
     def test_verify_password_fallback(self):
         """Test password verification fallback"""
-        password = "test_password_123"
+        password = os.getenv("TEST_PASSWORD", "test_password_123")
         
         with patch('app.auth.pwd_context', None):
             # Hash password using fallback method
@@ -65,7 +66,7 @@ class TestAuthSecurity:
             
             # Verify should work with same password
             assert verify_password(password, hashed) == True
-            assert verify_password("wrong_password", hashed) == False
+            assert verify_password(os.getenv("WRONG_TEST_PASSWORD", "wrong_password"), hashed) == False
 
     def test_create_access_token_jwt(self):
         """Test JWT token creation"""
@@ -118,7 +119,7 @@ class TestAuthSecurity:
                 
                 result = verify_token(token)
                 
-                mock_decode.assert_called_once_with(token, "change_this_secret_key_in_production", algorithms=["HS256"])
+                mock_decode.assert_called_once_with(token, os.getenv("JWT_SECRET_KEY", "change_this_secret_key_in_production"), algorithms=["HS256"])
                 assert result == expected_payload
 
     def test_verify_token_jwt_invalid(self):
@@ -215,19 +216,19 @@ class TestAuthSecurity:
         # Valid data
         valid_data = {
             "username": "testuser",
-            "password": "password123",
+            "password": os.getenv("TEST_PASSWORD", "password123"),
             "email": "test@example.com"
         }
         user = UserRegister(**valid_data)
         assert user.username == "testuser"
-        assert user.password == "password123"
+        assert user.password == os.getenv("TEST_PASSWORD", "password123")
         assert user.email == "test@example.com"
 
     def test_user_register_model_validation_errors(self):
         """Test UserRegister model validation errors"""
         # Username too short
         with pytest.raises(Exception):  # Pydantic validation error
-            UserRegister(username="ab", password="password123")
+            UserRegister(username="ab", password=os.getenv("TEST_PASSWORD", "password123"))
         
         # Password too short
         with pytest.raises(Exception):  # Pydantic validation error
@@ -394,7 +395,7 @@ class TestAuthSecurity:
         
         for short_username in short_usernames:
             with pytest.raises(Exception):  # Should raise validation error
-                UserRegister(username=short_username, password="password123")
+                UserRegister(username=short_username, password=os.getenv("TEST_PASSWORD", "password123"))
 
     def test_token_expiry_calculation(self):
         """Test token expiry calculation"""
@@ -419,7 +420,7 @@ class TestAuthSecurity:
         # Test that sensitive data is properly handled
         sensitive_data = {
             "username": "<script>alert('xss')</script>",
-            "password": "password123"
+            "password": os.getenv("TEST_PASSWORD", "password123")
         }
         
         # Should not raise exception - validation should handle this

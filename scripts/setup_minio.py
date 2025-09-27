@@ -85,8 +85,8 @@ def test_minio_connection():
         
         client = Minio(
             "localhost:9000",
-            access_key="minioadmin",
-            secret_key="minioadmin",
+            access_key=os.getenv("BHIV_MINIO_ACCESS_KEY", "minioadmin"),
+            secret_key=os.getenv("BHIV_MINIO_SECRET_KEY", "minioadmin"),
             secure=False
         )
         

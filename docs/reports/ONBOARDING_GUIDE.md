@@ -36,7 +36,7 @@ curl -X POST "http://localhost:8000/users/register" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "newuser",
-    "password": "SecurePass@123",
+    "password": "<your-secure-password>",
     "email": "user@example.com"
   }'
 ```

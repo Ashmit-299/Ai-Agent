@@ -28,12 +28,12 @@
 Add these environment variables in Render dashboard:
 
 ```bash
-JWS_SECRET=SJOYupb2v8rFU8nd3+B7G/5Y90BB+x0ihG+vTZ6M3lcAKnC0ThJtBEQvZz5ZgigQ+ZC96vAbmJQ0+1FMtLmqUw==
-DATABASE_URL=postgresql://postgres.dusqpdhojbgfxwflukhc:Moto%40Roxy123@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
-POSTHOG_API_KEY=phc_lmGvuDZ7JiyjDmkL1T6Wy3TvDHgFdjt1zlH02fVziwU
-SENTRY_DSN=https://0d595f5827bf2a4ae5da7d1ed1a09338@o4509949438328832.ingest.us.sentry.io/4510035576946688
-JWT_SECRET_KEY=SJOYupb2v8rFU8nd3+B7G/5Y90BB+x0ihG+vTZ6M3lcAKnC0ThJtBEQvZz5ZgigQ+ZC96vAbmJQ0+1FMtLmqUw==
-PERPLEXITY_API_KEY=your-perplexity-api-key
+JWS_SECRET=<your-jws-secret-key>
+DATABASE_URL=postgresql://<username>:<password>@<host>:<port>/<database>
+POSTHOG_API_KEY=<your-posthog-api-key>
+SENTRY_DSN=<your-sentry-dsn>
+JWT_SECRET_KEY=<your-jwt-secret-key>
+PERPLEXITY_API_KEY=<your-perplexity-api-key>
 BHIV_LM_URL=https://api.perplexity.ai
 BHIV_STORAGE_BACKEND=local
 ```

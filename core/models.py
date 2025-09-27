@@ -3,11 +3,14 @@
 SQLModel Database Models - Production Ready with Migration Support
 """
 
-from sqlmodel import SQLModel, Field, create_engine, Session
-from typing import Optional, List
+from sqlmodel import SQLModel, Field, create_engine, Session, Relationship
+from typing import Optional, List, TYPE_CHECKING
 from datetime import datetime
 import time
 import os
+
+if TYPE_CHECKING:
+    from typing import List
 
 # Database Models with explicit table configurations
 
@@ -140,3 +143,39 @@ def get_session():
     """Get database session"""
     with Session(engine) as session:
         yield session
+
+# Videos table for video-specific metadata
+class Video(SQLModel, table=True, extend_existing=True):
+    __tablename__ = "videos"
+    
+    video_id: str = Field(primary_key=True)
+    content_id: str = Field(foreign_key="content.content_id")
+    script_id: Optional[str] = Field(foreign_key="script.script_id")
+    title: str
+    description: Optional[str] = None
+    file_path: str
+    thumbnail_path: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    resolution: Optional[str] = None
+    frame_rate: Optional[float] = None
+    file_size_bytes: Optional[int] = None
+    generation_method: Optional[str] = None
+    processing_status: str = Field(default="completed")
+    created_at: float = Field(default_factory=time.time)
+    updated_at: Optional[float] = None
+
+# Enhanced Analytics model (SystemLog already exists)
+class EnhancedAnalytics(SQLModel, table=True, extend_existing=True):
+    """Enhanced analytics and event tracking"""
+    __tablename__ = "enhanced_analytics"
+    
+    id: Optional[int] = Field(primary_key=True)
+    event_type: str = Field(index=True)
+    user_id: Optional[str] = Field(foreign_key="user.user_id", index=True)
+    content_id: Optional[str] = Field(foreign_key="content.content_id", index=True)
+    session_id: Optional[str] = Field(index=True)
+    event_data: Optional[str] = None  # JSON string
+    timestamp: float = Field(default_factory=time.time, index=True)
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    referrer: Optional[str] = None

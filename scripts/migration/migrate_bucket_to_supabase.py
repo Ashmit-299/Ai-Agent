@@ -23,7 +23,7 @@ def migrate_bucket_data():
             demo_user = User(
                 user_id="demo001",
                 username="demo",
-                password_hash="demo_hash",
+                password_hash=os.getenv("DEMO_PASSWORD_HASH", "demo_hash"),
                 email="demo@example.com"
             )
             session.add(demo_user)

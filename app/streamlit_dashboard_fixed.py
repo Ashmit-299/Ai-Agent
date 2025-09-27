@@ -3,6 +3,7 @@
 BHIV Analytics - Fixed Dashboard
 """
 
+import os
 import streamlit as st
 import requests
 import plotly.graph_objects as go
@@ -20,7 +21,7 @@ def get_auth_headers():
     """Get authentication headers for API requests"""
     try:
         # Try to get demo credentials and login
-        login_data = {"username": "demo", "password": "demo123"}
+        login_data = {"username": "demo", "password": os.getenv("DEMO_PASSWORD", "demo123")}
         response = requests.post('http://127.0.0.1:9000/users/login', json=login_data, timeout=5)
         if response.status_code == 200:
             token = response.json().get('access_token')

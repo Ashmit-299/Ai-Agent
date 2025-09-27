@@ -13,9 +13,12 @@ from typing import Dict, Any
 
 app = FastAPI(title="Perplexity LLM Server")
 
-# Replace with your Perplexity API key
-PERPLEXITY_API_KEY = "pplx-your-api-key-here"
+import os
+
+# Get Perplexity API key from environment
+PERPLEXITY_API_KEY = os.getenv("PERPLEXITY_API_KEY", "pplx-your-api-key-here")
 PERPLEXITY_URL = "https://api.perplexity.ai/chat/completions"
+PERPLEXITY_MODEL = os.getenv("PERPLEXITY_MODEL", "llama-3.1-sonar-small-128k-online")
 
 class StoryboardRequest(BaseModel):
     script: str
@@ -60,7 +63,7 @@ Return only valid JSON in this exact format:
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.1-sonar-small-128k-online",
+                    "model": PERPLEXITY_MODEL,
                     "messages": [
                         {"role": "user", "content": prompt}
                     ]
@@ -128,7 +131,7 @@ Return improved storyboard JSON with same structure but better timing/content.""
                     "Content-Type": "application/json"
                 },
                 json={
-                    "model": "llama-3.1-sonar-small-128k-online",
+                    "model": PERPLEXITY_MODEL,
                     "messages": [
                         {"role": "user", "content": prompt}
                     ]

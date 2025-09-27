@@ -29,7 +29,7 @@ class TestUserInviter:
         from ..app.security import hash_password
         
         user_id = f"test_{uuid.uuid4().hex[:8]}"
-        password = f"test{username}123"
+        password = os.getenv("TEST_PASSWORD", f"test{username}123")
         password_hash = hash_password(password)
         
         user_data = {

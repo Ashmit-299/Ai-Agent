@@ -3,6 +3,7 @@
 Debug demo authentication issue
 """
 
+import os
 import time
 from ..core.database import DatabaseManager
 from ..app.security import PasswordManager
@@ -33,7 +34,7 @@ def debug_demo_auth():
     # Step 2: Test password verification
     print("\n2. Testing password verification...")
     try:
-        test_password = 'demo1234'
+        test_password = os.getenv('DEMO_PASSWORD', 'demo1234')
         if PasswordManager.verify_password(test_password, user.password_hash):
             print(f"[OK] Password verification successful")
         else:
@@ -88,11 +89,11 @@ def debug_demo_auth():
                 self.password = password
         
         mock_request = MockRequest()
-        mock_form = MockFormData("demo", "demo1234")
+        mock_form = MockFormData("demo", os.getenv('DEMO_PASSWORD', 'demo1234'))
         
         print("[INFO] Mock login flow test setup complete")
         print("  - Username: demo")
-        print("  - Password: demo1234")
+        print(f"  - Password: {os.getenv('DEMO_PASSWORD', 'demo1234')}")
         
     except Exception as e:
         print(f"[ERROR] Login flow test setup failed: {e}")
@@ -140,7 +141,7 @@ def test_auth_endpoints():
         try:
             login_data = {
                 "username": "demo",
-                "password": "demo1234"
+                "password": os.getenv('DEMO_PASSWORD', 'demo1234')
             }
             
             response = requests.post(f"{base_url}/users/login", data=login_data, timeout=10)
@@ -196,7 +197,7 @@ if __name__ == "__main__":
     
     if db_success and endpoint_success:
         print("\n[SUCCESS] Demo authentication is working correctly!")
-        print("Credentials: username=demo, password=demo1234")
+        print(f"Credentials: username=demo, password={os.getenv('DEMO_PASSWORD', 'demo1234')}")
     elif db_success:
         print("\n[PARTIAL] Database components work, but server may not be running")
         print("Try starting the server with: python start_server.py")

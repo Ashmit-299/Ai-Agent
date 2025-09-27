@@ -7,11 +7,23 @@ import sqlite3
 from typing import Optional, List, Dict, Any
 from sqlmodel import Session
 from core.database import get_session
+from .security import InputSanitizer, log_security_event
+# Optional MIME type detection
+try:
+    import magic
+    MAGIC_AVAILABLE = True
+except ImportError:
+    MAGIC_AVAILABLE = False
 from .models import (
     ContentResponse, FeedbackRequest, FeedbackResponse, 
     TagRecommendationResponse, MetricsResponse, AnalyticsResponse,
     VideoGenerationResponse, HealthResponse, SuccessResponse
 )
+# Database integration import with fallback
+try:
+    from core.database_integration import db_integration
+except ImportError:
+    db_integration = None
 # Removed imports for deleted modules
 # from .config_validator import validate_environment
 # from .db_pool import get_pooled_connection
@@ -258,7 +270,7 @@ def create_demo_user():
             # Verify password works
             try:
                 from .security import PasswordManager
-                if PasswordManager.verify_password('demo1234', existing_user.password_hash):
+                if PasswordManager.verify_password(os.getenv('DEMO_PASSWORD', 'demo1234'), existing_user.password_hash):
                     print("Demo user ready in main database with correct password")
                     return True
                 else:
@@ -340,8 +352,8 @@ def health_check():
 @step1_router.get('/demo-login')
 def demo_login():
     """STEP 1B: Get demo credentials for quick testing - PUBLIC ACCESS"""
-    # Use static demo credentials for reliability
-    demo_password = "demo1234"
+    # Get demo password from environment variable for security
+    demo_password = os.getenv("DEMO_PASSWORD", "demo1234")
     
     # Ensure demo user exists and password works
     create_demo_user()
@@ -394,7 +406,7 @@ def test_demo_login():
         user = db.get_user_by_username('demo')
         
         if user:
-            if PasswordManager.verify_password('demo1234', user.password_hash):
+            if PasswordManager.verify_password(os.getenv('DEMO_PASSWORD', 'demo1234'), user.password_hash):
                 return {"status": "success", "message": "Demo credentials work correctly in main database"}
             else:
                 return {"status": "failed", "message": "Password verification failed in main database"}
@@ -402,6 +414,41 @@ def test_demo_login():
             return {"status": "failed", "message": "Demo user not found in main database"}
     except Exception as e:
         return {"status": "error", "message": str(e)}
+
+@step1_router.post('/test-error')
+def test_error_tracking():
+    """STEP 1D: Test error tracking for Sentry integration - PUBLIC ACCESS"""
+    try:
+        from .observability import capture_exception, track_event
+        
+        # Create a test error
+        test_error = Exception("This is a test error for Sentry integration")
+        
+        # Capture with Sentry
+        capture_exception(test_error, {
+            "test_type": "sentry_integration",
+            "endpoint": "/test-error",
+            "timestamp": time.time()
+        })
+        
+        # Track test event in PostHog
+        track_event("test_user", "error_test_triggered", {
+            "test_type": "observability_integration",
+            "success": True
+        })
+        
+        return {
+            "status": "success",
+            "message": "Test error sent to Sentry and event tracked in PostHog",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S'),
+            "next_step": "Check your Sentry and PostHog dashboards for the test data"
+        }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Test failed: {str(e)}",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
 
 
 
@@ -592,10 +639,21 @@ def list_contents(limit: int = 20, current_user = Depends(get_current_user)):
 @step3_router.post('/upload', response_model=ContentResponse, status_code=201)
 @track_performance("content_upload")
 @track_user_action("upload_content")
-async def upload(file: UploadFile = File(...), title: str = Form(...), description: str = Form(''), current_user = Depends(get_current_user), session: Session = Depends(get_session)):
-    """STEP 3B: Upload content file (requires authentication)"""
+async def upload(file: UploadFile = File(...), title: str = Form(...), description: str = Form(''), current_user = Depends(get_current_user), session: Session = Depends(get_session), request: Request = None):
+    """STEP 3B: Upload content file with enhanced security (requires authentication)"""
     if not current_user:
         raise HTTPException(status_code=401, detail="Authentication required")
+    
+    client_ip = request.client.host if request and request.client else "unknown"
+    
+    # Enhanced input validation
+    try:
+        title = InputSanitizer.sanitize_string(title, 200)
+        description = InputSanitizer.sanitize_string(description, 1000)
+        if not title.strip():
+            raise HTTPException(status_code=400, detail="Title cannot be empty")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
     
     # Track user action with observability
     try:
@@ -607,32 +665,79 @@ async def upload(file: UploadFile = File(...), title: str = Form(...), descripti
         })
     except Exception:
         pass  # Don't fail on tracking errors
+    
     try:
         if not file.filename:
             raise HTTPException(status_code=400, detail="No filename provided")
         
+        # Enhanced file validation
         allowed_extensions = {'.mp4', '.mp3', '.wav', '.jpg', '.jpeg', '.png', '.txt', '.pdf'}
         allowed_mime_types = {
             'video/mp4', 'audio/mpeg', 'audio/wav', 'image/jpeg', 'image/png', 'text/plain', 'application/pdf'
         }
         
-        safe_filename = os.path.basename(file.filename)
+        # Sanitize filename
+        try:
+            safe_filename = InputSanitizer.sanitize_filename(file.filename)
+        except ValueError as e:
+            log_security_event(
+                "file_upload_invalid_filename",
+                {"filename": file.filename, "error": str(e)},
+                client_ip,
+                current_user.user_id
+            )
+            raise HTTPException(status_code=400, detail="Invalid filename")
+        
         ext = os.path.splitext(safe_filename)[1].lower()
         
         if ext not in allowed_extensions:
+            log_security_event(
+                "file_upload_invalid_extension",
+                {"filename": safe_filename, "extension": ext},
+                client_ip,
+                current_user.user_id
+            )
             raise HTTPException(status_code=400, detail=f"File extension {ext} not allowed")
         
-        # More flexible MIME type validation - allow if extension is valid
-        if file.content_type and file.content_type not in allowed_mime_types:
-            # Allow if extension is in allowed list (browser may send generic MIME type)
-            if ext not in allowed_extensions:
-                raise HTTPException(status_code=400, detail=f"MIME type {file.content_type} not allowed")
-        
+        # Read file data for validation
         data = await file.read()
-        max_size = 100 * 1024 * 1024
+        max_size = 100 * 1024 * 1024  # 100MB
         if len(data) > max_size:
-            raise HTTPException(status_code=413, detail="File too large")
+            log_security_event(
+                "file_upload_size_exceeded",
+                {"filename": safe_filename, "size": len(data), "max_size": max_size},
+                client_ip,
+                current_user.user_id
+            )
+            raise HTTPException(status_code=413, detail="File too large (max 100MB)")
         
+        # Enhanced MIME type validation using python-magic if available
+        if MAGIC_AVAILABLE:
+            try:
+                detected_mime = magic.from_buffer(data[:2048], mime=True)
+                if detected_mime not in allowed_mime_types:
+                    # Check if it's a text file that might be detected differently
+                    if ext == '.txt' and detected_mime.startswith('text/'):
+                        pass  # Allow text files with various text MIME types
+                    else:
+                        log_security_event(
+                            "file_upload_mime_mismatch",
+                            {"filename": safe_filename, "detected_mime": detected_mime, "declared_mime": file.content_type},
+                            client_ip,
+                            current_user.user_id
+                        )
+                        raise HTTPException(status_code=400, detail=f"File content type {detected_mime} not allowed")
+            except Exception as e:
+                # Log but don't fail on MIME detection errors
+                logger.warning(f"MIME type detection failed: {e}")
+        else:
+            # Fallback validation without python-magic
+            if file.content_type and file.content_type not in allowed_mime_types:
+                if ext not in allowed_extensions:
+                    raise HTTPException(status_code=400, detail=f"MIME type {file.content_type} not allowed")
+
+        
+        # Generate content hash
         h = hashlib.sha256(data).hexdigest()[:12]
         content_id = f"{h}_{uuid.uuid4().hex[:6]}"
         uploader_id = current_user.user_id if current_user else 'anonymous'
@@ -2247,23 +2352,40 @@ def list_bucket_files(segment: str, limit: int = 20, current_user = Depends(get_
 def get_bhiv_analytics(current_user = Depends(get_current_user)):
     """STEP 6H: Advanced analytics with sentiment analysis (authentication optional)"""
     try:
-        # Get analytics from Supabase database
-        try:
-            from core.database import DatabaseManager
-            db = DatabaseManager()
-            analytics_data = db.get_analytics_data()
-            total_users = analytics_data.get('total_users', 0)
-            total_content = analytics_data.get('total_content', 0)
-            total_feedback = analytics_data.get('total_feedback', 0)
-            avg_rating = analytics_data.get('average_rating', 0.0)
-            sentiment_data = analytics_data.get('sentiment_breakdown', {})
-            avg_engagement = analytics_data.get('average_engagement', 0.0)
-        except Exception as db_error:
-            import logging
-            logging.error(f"Analytics query failed: {db_error}")
-            total_users = total_content = total_feedback = 0
-            avg_rating = avg_engagement = 0.0
-            sentiment_data = {}
+        # Get analytics using integrated database with fallback
+        if db_integration:
+            try:
+                dashboard_data = db_integration.get_dashboard_data()
+                overview = dashboard_data.get('overview', {})
+                total_users = overview.get('total_users', 0)
+                total_content = overview.get('total_content', 0)
+                total_feedback = overview.get('total_feedback', 0)
+                avg_rating = overview.get('average_rating', 0.0)
+                avg_engagement = avg_rating  # Use rating as engagement proxy
+                sentiment_data = {}
+            except Exception as db_error:
+                import logging
+                logging.error(f"Integrated analytics failed: {db_error}")
+                total_users = total_content = total_feedback = 0
+                avg_rating = avg_engagement = 0.0
+                sentiment_data = {}
+        else:
+            try:
+                from core.database import DatabaseManager
+                db = DatabaseManager()
+                analytics_data = db.get_analytics_data()
+                total_users = analytics_data.get('total_users', 0)
+                total_content = analytics_data.get('total_content', 0)
+                total_feedback = analytics_data.get('total_feedback', 0)
+                avg_rating = analytics_data.get('average_rating', 0.0)
+                sentiment_data = analytics_data.get('sentiment_breakdown', {})
+                avg_engagement = analytics_data.get('average_engagement', 0.0)
+            except Exception as db_error:
+                import logging
+                logging.error(f"Analytics query failed: {db_error}")
+                total_users = total_content = total_feedback = 0
+                avg_rating = avg_engagement = 0.0
+                sentiment_data = {}
         
         # Calculate proper engagement rate
         if total_content > 0:
@@ -2330,6 +2452,185 @@ def get_performance_metrics(current_user = Depends(get_current_user)):
             'performance_summary': {'metrics': {}, 'slow_operations_count': 0},
             'timestamp': time.strftime('%Y-%m-%d %H:%M:%S')
         }
+
+# ===== ANALYTICS ENDPOINTS =====
+
+@step6_router.post('/analytics/event')
+async def log_analytics_event(
+    event_type: str = Body(...),
+    user_id: str = Body(None),
+    content_id: str = Body(None),
+    metadata: dict = Body(None),
+    request: Request = None,
+    current_user = Depends(get_current_user)
+):
+    """Add analytics event to enhanced analytics table"""
+    try:
+        # Get IP address
+        client_ip = request.client.host if request and request.client else "unknown"
+        
+        # Use authenticated user if available
+        if current_user and not user_id:
+            user_id = current_user.user_id
+        
+        # Log using database integration
+        if db_integration:
+            analytics_entry = db_integration.log_analytics_event(
+                event_type=event_type,
+                user_id=user_id,
+                content_id=content_id,
+                metadata=metadata,
+                ip_address=client_ip
+            )
+            
+            if analytics_entry:
+                return {
+                    "status": "success",
+                    "analytics_id": analytics_entry.id,
+                    "event_type": event_type,
+                    "timestamp": analytics_entry.timestamp
+                }
+        
+        # Fallback: save to bucket
+        analytics_data = {
+            "event_type": event_type,
+            "user_id": user_id,
+            "content_id": content_id,
+            "metadata": metadata,
+            "ip_address": client_ip,
+            "timestamp": time.time()
+        }
+        
+        filename = f"analytics_{event_type}_{int(time.time())}.json"
+        bhiv_bucket.save_json('logs', filename, analytics_data)
+        
+        return {
+            "status": "success",
+            "event_type": event_type,
+            "saved_to": "bucket_fallback",
+            "timestamp": analytics_data["timestamp"]
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics logging failed: {str(e)}")
+
+@step6_router.get('/analytics/summary')
+def get_analytics_summary(days: int = 30, current_user = Depends(get_current_user)):
+    """Get analytics summary from enhanced analytics table"""
+    try:
+        if db_integration:
+            summary = db_integration.get_analytics_summary(days=days)
+            return {
+                "analytics_summary": summary,
+                "period_days": days,
+                "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+            }
+        
+        # Fallback: basic summary
+        return {
+            "analytics_summary": {
+                "period_days": days,
+                "total_events": 0,
+                "event_types": {}
+            },
+            "message": "Database integration not available",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics summary failed: {str(e)}")
+
+@step6_router.get('/analytics/events/{event_type}')
+def get_events_by_type(event_type: str, limit: int = 50, current_user = Depends(get_current_user)):
+    """Get specific event type from analytics table"""
+    try:
+        if db_integration:
+            # Get events from database
+            with Session(db_integration.engine) as session:
+                from core.models import Analytics
+                from sqlmodel import select, desc
+                
+                statement = select(Analytics).where(
+                    Analytics.event_type == event_type
+                ).order_by(desc(Analytics.timestamp)).limit(limit)
+                
+                events = session.exec(statement).all()
+                
+                return {
+                    "event_type": event_type,
+                    "events": [{
+                        "id": event.id,
+                        "user_id": event.user_id,
+                        "content_id": event.content_id,
+                        "event_data": json.loads(event.event_data) if event.event_data else None,
+                        "timestamp": event.timestamp,
+                        "ip_address": event.ip_address
+                    } for event in events],
+                    "count": len(events),
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+        
+        return {
+            "event_type": event_type,
+            "events": [],
+            "message": "Database integration not available",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Event retrieval failed: {str(e)}")
+
+@step6_router.get('/analytics/user/{user_id}')
+def get_user_analytics(user_id: str, days: int = 30, current_user = Depends(get_current_user)):
+    """Get analytics for specific user"""
+    try:
+        if db_integration:
+            cutoff_time = time.time() - (days * 24 * 3600)
+            
+            with Session(db_integration.engine) as session:
+                from core.models import Analytics
+                from sqlmodel import select, func
+                
+                # Get user events
+                events_stmt = select(Analytics).where(
+                    Analytics.user_id == user_id,
+                    Analytics.timestamp >= cutoff_time
+                ).order_by(Analytics.timestamp.desc()).limit(100)
+                
+                events = session.exec(events_stmt).all()
+                
+                # Get event type counts
+                counts_stmt = select(
+                    Analytics.event_type,
+                    func.count(Analytics.id)
+                ).where(
+                    Analytics.user_id == user_id,
+                    Analytics.timestamp >= cutoff_time
+                ).group_by(Analytics.event_type)
+                
+                event_counts = dict(session.exec(counts_stmt).all())
+                
+                return {
+                    "user_id": user_id,
+                    "period_days": days,
+                    "total_events": len(events),
+                    "event_types": event_counts,
+                    "recent_events": [{
+                        "event_type": event.event_type,
+                        "content_id": event.content_id,
+                        "timestamp": event.timestamp
+                    } for event in events[:10]],
+                    "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+                }
+        
+        return {
+            "user_id": user_id,
+            "message": "Database integration not available",
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"User analytics failed: {str(e)}")
 
 # ===== STEP 7: TASK QUEUE MANAGEMENT =====
 
@@ -2470,16 +2771,26 @@ def get_dashboard(current_user = Depends(get_current_user)):
     """HTML dashboard for system monitoring"""
     from fastapi.responses import HTMLResponse
     
-    # Get basic stats from Supabase
+    # Get comprehensive dashboard data using integrated database
     try:
-        from core.database import DatabaseManager
-        db = DatabaseManager()
-        analytics_data = db.get_analytics_data()
-        total_contents = analytics_data['total_content']
-        total_feedback = analytics_data['total_feedback']
-        total_users = analytics_data['total_users']
-    except:
-        total_contents = total_feedback = total_users = 0
+        if db_integration:
+            dashboard_data = db_integration.get_dashboard_data()
+            overview = dashboard_data.get('overview', {})
+            total_contents = overview.get('total_content', 0)
+            total_feedback = overview.get('total_feedback', 0)
+            total_users = overview.get('total_users', 0)
+            total_scripts = overview.get('total_scripts', 0)
+        else:
+            # Fallback to basic database query
+            from core.database import DatabaseManager
+            db = DatabaseManager()
+            analytics_data = db.get_analytics_data()
+            total_contents = analytics_data.get('total_content', 0)
+            total_feedback = analytics_data.get('total_feedback', 0)
+            total_users = analytics_data.get('total_users', 0)
+            total_scripts = 0
+    except Exception as e:
+        total_contents = total_feedback = total_users = total_scripts = 0
     
     html_content = f"""
     <!DOCTYPE html>

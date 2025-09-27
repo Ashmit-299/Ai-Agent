@@ -84,7 +84,7 @@
       "response_data": {
         "demo_credentials": {
           "username": "demo",
-          "password": "demo123"
+          "password": "<demo-password>"
         },
         "next_step": "POST /users/login with these credentials to get access token"
       }

@@ -138,7 +138,7 @@ def run_quick_smoke_test():
         
         # Test auth functions
         from app.auth import hash_password, verify_password
-        test_password = "test123"
+        test_password = os.getenv("TEST_PASSWORD", "test123")
         hashed = hash_password(test_password)
         
         if verify_password(test_password, hashed):

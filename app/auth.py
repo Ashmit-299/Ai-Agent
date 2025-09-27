@@ -26,6 +26,35 @@ from .security import (
 )
 from core.database import DatabaseManager
 
+class SupabaseJWTManager:
+    """Enhanced JWT manager with Supabase integration"""
+    
+    @staticmethod
+    def verify_supabase_token(token: str) -> Dict[str, Any]:
+        """Verify Supabase JWT token"""
+        try:
+            import jwt
+            supabase_secret = os.getenv("SUPABASE_JWT_SECRET")
+            if supabase_secret:
+                payload = jwt.decode(token, supabase_secret, algorithms=["HS256"])
+                return payload
+        except Exception as e:
+            logger.warning(f"Supabase token verification failed: {e}")
+        
+        # Fallback to regular JWT verification
+        return JWTManager.verify_token(token, "access")
+    
+    @staticmethod
+    def create_enhanced_token(user_data: Dict[str, Any]) -> str:
+        """Create token with enhanced claims"""
+        enhanced_data = user_data.copy()
+        enhanced_data.update({
+            "iss": "ai-agent",
+            "aud": "ai-agent-users",
+            "role": "authenticated"
+        })
+        return JWTManager.create_access_token(enhanced_data)
+
 logger = logging.getLogger(__name__)
 db = DatabaseManager()
 router = APIRouter(prefix="/users", tags=["STEP 2: User Authentication"])
@@ -56,20 +85,44 @@ async def get_current_user_optional(request: Request) -> Optional[AuthUser]:
         return None
 
 async def get_current_user_required(request: Request) -> AuthUser:
-    """Get current user (required authentication)"""
-    user_data = await security_manager.authenticate_request(request)
-    if not user_data:
+    """Get current user (required authentication) with enhanced verification"""
+    try:
+        # Try enhanced authentication first
+        user_data = await security_manager.authenticate_request(request)
+        if not user_data:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Authentication required",
+                headers={"WWW-Authenticate": "Bearer"}
+            )
+        
+        # Verify user still exists in database
+        user = db.get_user_by_id(user_data["user_id"])
+        if not user:
+            log_security_event(
+                "auth_user_not_found",
+                {"user_id": user_data["user_id"]},
+                security_manager.get_client_ip(request)
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account not found"
+            )
+        
+        return AuthUser(
+            user_id=user_data["user_id"],
+            username=user_data["username"],
+            token_jti=user_data.get("token_jti")
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Authentication verification failed: {e}")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Authentication required",
-            headers={"WWW-Authenticate": "Bearer"}
+            detail="Authentication verification failed"
         )
-    
-    return AuthUser(
-        user_id=user_data["user_id"],
-        username=user_data["username"],
-        token_jti=user_data.get("token_jti")
-    )
 
 @router.post("/register", response_model=Token, status_code=201)
 async def register_user(user_data: UserRegister, request: Request):

@@ -3,6 +3,7 @@
 Fix demo user password with proper bcrypt hashing
 """
 
+import os
 import time
 from ..core.database import DatabaseManager
 from ..app.security import PasswordManager
@@ -13,7 +14,7 @@ def fix_demo_password():
         print("Fixing demo user password...")
         
         # Create proper bcrypt hash
-        demo_password = 'demo1234'
+        demo_password = os.getenv('DEMO_PASSWORD', 'demo1234')
         demo_hash = PasswordManager.hash_password(demo_password)
         print(f"Generated bcrypt hash: {demo_hash[:60]}...")
         
@@ -104,6 +105,6 @@ if __name__ == "__main__":
     
     if success:
         print("\n[SUCCESS] Demo user password fixed!")
-        print("Credentials: username=demo, password=demo1234")
+        print(f"Credentials: username=demo, password={demo_password}")
     else:
         print("\n[FAILED] Could not fix demo user password")

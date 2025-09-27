@@ -81,7 +81,7 @@ class TestDatabaseModels:
         """Test UserRegister model field constraints"""
         # Test minimum username length
         with pytest.raises(Exception):  # Pydantic validation error
-            UserRegister(username="ab", password="password123")
+            UserRegister(username="ab", password=os.getenv("TEST_PASSWORD", "password123"))
         
         # Test minimum password length
         with pytest.raises(Exception):  # Pydantic validation error
@@ -90,7 +90,7 @@ class TestDatabaseModels:
         # Test maximum username length
         long_username = "a" * 51  # Exceeds max_length=50
         with pytest.raises(Exception):  # Pydantic validation error
-            UserRegister(username=long_username, password="password123")
+            UserRegister(username=long_username, password=os.getenv("TEST_PASSWORD", "password123"))
 
     def test_content_upload_model_validation(self):
         """Test ContentUpload model validation"""
@@ -294,7 +294,7 @@ class TestDatabaseModels:
         # Test exact boundary values
         
         # Username exactly at minimum length (3 chars)
-        user_reg = UserRegister(username="abc", password="password123")
+        user_reg = UserRegister(username="abc", password=os.getenv("TEST_PASSWORD", "password123"))
         assert user_reg.username == "abc"
         
         # Password exactly at minimum length (6 chars)
@@ -354,7 +354,7 @@ class TestDatabaseModels:
         
         user_reg = UserRegister(
             username="testuser",
-            password="password123",
+            password=os.getenv("TEST_PASSWORD", "password123"),
             email="not-an-email"  # Invalid format but accepted by basic str field
         )
         
