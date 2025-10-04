@@ -1,0 +1,233 @@
+{
+  "overall_success": true,
+  "total_checks": 10,
+  "successful_checks": 9,
+  "success_rate": 90.0,
+  "timestamp": "2025-09-30T04:46:39.044560",
+  "base_url": "http://localhost:8000",
+  "detailed_results": [
+    {
+      "endpoint": "/health",
+      "url": "http://localhost:8000/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2094.48,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:15.147195",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation",
+        "authentication": "not_required"
+      }
+    },
+    {
+      "endpoint": "/docs",
+      "url": "http://localhost:8000/docs",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2047.38,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:17.194576",
+      "response_text": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"http"
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "http://localhost:8000/metrics",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 6139.77,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:23.334347",
+      "response_data": {
+        "system_metrics": {
+          "total_contents": 81,
+          "total_feedback": 11,
+          "total_users": 27
+        },
+        "rl_agent_metrics": {
+          "epsilon": 0.2,
+          "q_states": 9,
+          "avg_recent_reward": 0.0,
+          "replay_size": 0,
+          "total_contents": 3,
+          "registered_contents": 3,
+          "total_feedback_events": 3,
+          "learning_rate": 0.3,
+          "discount_factor": 0.9
+        },
+        "timestamp": "2025-09-30 10:16:23",
+        "next_step": "GET /rl/agent-stats for detailed RL metrics or GET /lm/stats for LLM status"
+      }
+    },
+    {
+      "endpoint": "/",
+      "url": "http://localhost:8000/",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2034.8,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:25.369145",
+      "response_text": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5.9.0/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"http"
+    },
+    {
+      "endpoint": "/health",
+      "url": "http://localhost:8000/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2041.48,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:27.410624",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation",
+        "authentication": "not_required"
+      }
+    },
+    {
+      "endpoint": "/demo-login",
+      "url": "http://localhost:8000/demo-login",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 3467.42,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:30.878048",
+      "response_data": {
+        "demo_credentials": {
+          "username": "demo",
+          "password": "demo1234"
+        },
+        "authentication": "not_required",
+        "login_test": {
+          "status": "success",
+          "message": "Demo credentials work correctly in main database"
+        },
+        "password_hashing": "bcrypt (compatible with login system)",
+        "instructions": [
+          "1. Copy the credentials above",
+          "2. Go to POST /users/login endpoint",
+          "3. Use 'Try it out' and enter username and password",
+          "4. Execute to get your access token"
+        ],
+        "next_step": "POST /users/login with these credentials to get access token"
+      }
+    },
+    {
+      "endpoint": "/users/login",
+      "success": true,
+      "status_code": 200,
+      "timestamp": "2025-09-30T04:46:33.883934",
+      "token_received": true
+    },
+    {
+      "endpoint": "/health",
+      "url": "http://localhost:8000/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2051.33,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:35.936266",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation",
+        "authentication": "not_required"
+      }
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "http://localhost:8000/metrics",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 3107.76,
+      "success": true,
+      "timestamp": "2025-09-30T04:46:39.044030",
+      "response_data": {
+        "system_metrics": {
+          "total_contents": 81,
+          "total_feedback": 11,
+          "total_users": 27
+        },
+        "rl_agent_metrics": {
+          "epsilon": 0.2,
+          "q_states": 9,
+          "avg_recent_reward": 0.0,
+          "replay_size": 0,
+          "total_contents": 3,
+          "registered_contents": 3,
+          "total_feedback_events": 3,
+          "learning_rate": 0.3,
+          "discount_factor": 0.9
+        },
+        "timestamp": "2025-09-30 10:16:39",
+        "next_step": "GET /rl/agent-stats for detailed RL metrics or GET /lm/stats for LLM status"
+      }
+    },
+    {
+      "check_type": "performance",
+      "avg_response_time_ms": 2579.55,
+      "max_response_time_ms": 3107.76,
+      "slow_endpoints": [
+        {
+          "endpoint": "/health",
+          "url": "http://localhost:8000/health",
+          "status_code": 200,
+          "expected_status": 200,
+          "response_time_ms": 2051.33,
+          "success": true,
+          "timestamp": "2025-09-30T04:46:35.936266",
+          "response_data": {
+            "status": "healthy",
+            "service": "AI Content Uploader Agent",
+            "version": "1.0.0",
+            "environment_valid": true,
+            "config_warnings": 0,
+            "message": "Use /docs for API documentation",
+            "authentication": "not_required"
+          }
+        },
+        {
+          "endpoint": "/metrics",
+          "url": "http://localhost:8000/metrics",
+          "status_code": 200,
+          "expected_status": 200,
+          "response_time_ms": 3107.76,
+          "success": true,
+          "timestamp": "2025-09-30T04:46:39.044030",
+          "response_data": {
+            "system_metrics": {
+              "total_contents": 81,
+              "total_feedback": 11,
+              "total_users": 27
+            },
+            "rl_agent_metrics": {
+              "epsilon": 0.2,
+              "q_states": 9,
+              "avg_recent_reward": 0.0,
+              "replay_size": 0,
+              "total_contents": 3,
+              "registered_contents": 3,
+              "total_feedback_events": 3,
+              "learning_rate": 0.3,
+              "discount_factor": 0.9
+            },
+            "timestamp": "2025-09-30 10:16:39",
+            "next_step": "GET /rl/agent-stats for detailed RL metrics or GET /lm/stats for LLM status"
+          }
+        }
+      ],
+      "success": false,
+      "timestamp": "2025-09-30T04:46:39.044560"
+    }
+  ]
+}

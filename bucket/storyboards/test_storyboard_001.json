@@ -1,0 +1,20 @@
+{
+  "content_id": "test_content_001",
+  "title": "Test Storyboard",
+  "scenes": [
+    {
+      "scene_id": "scene_0",
+      "duration": 2.0,
+      "frames": [
+        {
+          "text": "Test frame content",
+          "background_color": "#000000",
+          "text_position": "center"
+        }
+      ]
+    }
+  ],
+  "total_duration": 2.0,
+  "generation_method": "test",
+  "created_at": 1759207744.6255488
+}

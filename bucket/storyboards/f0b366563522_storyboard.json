@@ -1,0 +1,20 @@
+{
+  "version": "1.0",
+  "total_duration": 3.0,
+  "scenes": [
+    {
+      "id": "scene_1",
+      "start_time": 0.0,
+      "duration": 3.0,
+      "frames": [
+        {
+          "id": "frame_1_1",
+          "text": "Script 1",
+          "image_placeholder": "image_1.jpg",
+          "text_position": "center",
+          "background_color": "#000000"
+        }
+      ]
+    }
+  ]
+}

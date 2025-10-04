@@ -1,0 +1,6 @@
+
+        Welcome to our AI video generation system.
+        This is a test script for integration testing.
+        We will create a video from this text content.
+        Each sentence will become a frame in the video.
+        

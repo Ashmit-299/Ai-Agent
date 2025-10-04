@@ -1,0 +1,36 @@
+{
+  "name": "AI Content Uploader Agent",
+  "description": "AI-powered content analysis and recommendation system with RL",
+  "repository": "https://github.com/yourusername/ai-uploader-agent",
+  "logo": "https://cdn.jsdelivr.net/npm/heroicons@1.0.6/outline/cloud-upload.svg",
+  "keywords": ["fastapi", "ai", "machine-learning", "video-processing"],
+  "stack": "heroku-20",
+  "env": {
+    "SECRET_KEY": {
+      "description": "Secret key for JWT tokens",
+      "generator": "secret"
+    },
+    "DATABASE_URL": {
+      "description": "Database connection string",
+      "value": "sqlite:///./data.db"
+    },
+    "BHIV_LM_URL": {
+      "description": "LLM service URL",
+      "value": "http://localhost:8001"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1,
+      "size": "basic"
+    }
+  },
+  "addons": [
+    "heroku-postgresql:mini"
+  ],
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ]
+}

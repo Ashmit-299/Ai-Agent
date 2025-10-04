@@ -1,0 +1,75 @@
+{
+  "q": {
+    "auth_2_t0": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_0_t2": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_0_t3": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_4_t7": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_1_t2": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_4_t8": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_2_t2": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_2_t5": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_4_t3": {
+      "nop": 0.3,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_1_t1": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_3_t1": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_3_t4": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_4_t0": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    },
+    "auth_4_t1": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
+    }
+  },
+  "epsilon": 0.2
+}

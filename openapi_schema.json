@@ -1,0 +1,2226 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AI Content Uploader Agent",
+    "description": "AI-powered content analysis system with JWT authentication",
+    "version": "1.0.0"
+  },
+  "paths": {
+    "/test-data-saving": {
+      "post": {
+        "tags": [
+          "Testing"
+        ],
+        "summary": "Test Data Saving",
+        "description": "Test endpoint to verify data is saving to both bucket and database - REQUIRES AUTHENTICATION",
+        "operationId": "test_data_saving_test_data_saving_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug-auth": {
+      "get": {
+        "tags": [
+          "STEP 1: System Health & Demo Access"
+        ],
+        "summary": "Debug Auth",
+        "description": "STEP 1C: Debug authentication status for Swagger UI - PUBLIC ACCESS",
+        "operationId": "debug_auth_debug_auth_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health/detailed": {
+      "get": {
+        "summary": "Health Detailed",
+        "description": "Detailed health check with observability status",
+        "operationId": "health_detailed_health_detailed_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics/performance": {
+      "get": {
+        "summary": "Performance Metrics",
+        "description": "Get performance metrics summary",
+        "operationId": "performance_metrics_metrics_performance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/health": {
+      "get": {
+        "tags": [
+          "STEP 1: System Health & Demo Access"
+        ],
+        "summary": "Health Check",
+        "description": "STEP 1A: Check if system is running - PUBLIC ACCESS",
+        "operationId": "health_check_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/": {
+      "get": {
+        "tags": [
+          "Default Endpoints"
+        ],
+        "summary": "Root",
+        "description": "Root endpoint - show welcome page",
+        "operationId": "root__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/test": {
+      "get": {
+        "tags": [
+          "Default Endpoints"
+        ],
+        "summary": "Simple Test",
+        "description": "Simple test endpoint to verify server is working",
+        "operationId": "simple_test_test_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/demo-login": {
+      "get": {
+        "tags": [
+          "STEP 1: System Health & Demo Access"
+        ],
+        "summary": "Demo Login",
+        "description": "STEP 1B: Get demo credentials for quick testing - PUBLIC ACCESS",
+        "operationId": "demo_login_demo_login_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/register": {
+      "post": {
+        "tags": [
+          "STEP 2: User Authentication"
+        ],
+        "summary": "Register User",
+        "description": "STEP 2A: Register new user account with enhanced security - PUBLIC ACCESS",
+        "operationId": "register_user_users_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserRegister"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/login": {
+      "post": {
+        "tags": [
+          "STEP 2: User Authentication"
+        ],
+        "summary": "Login User",
+        "description": "STEP 2B: Login user with enhanced security - PUBLIC ACCESS",
+        "operationId": "login_user_users_login_post",
+        "requestBody": {
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_login_user_users_login_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/refresh": {
+      "post": {
+        "tags": [
+          "STEP 2: User Authentication"
+        ],
+        "summary": "Refresh Token",
+        "description": "STEP 2C: Refresh access token using refresh token",
+        "operationId": "refresh_token_users_refresh_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RefreshToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Token"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/profile": {
+      "get": {
+        "tags": [
+          "STEP 2: User Authentication"
+        ],
+        "summary": "Get User Profile",
+        "description": "STEP 2D: Get current user profile",
+        "operationId": "get_user_profile_users_profile_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/users/logout": {
+      "post": {
+        "tags": [
+          "STEP 2: User Authentication"
+        ],
+        "summary": "Logout User",
+        "description": "STEP 2E: Logout user (invalidate token)",
+        "operationId": "logout_user_users_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
+    "/contents": {
+      "get": {
+        "tags": [
+          "STEP 3: Content Upload & Video Generation"
+        ],
+        "summary": "List Contents",
+        "description": "STEP 3A: Browse existing content (authentication optional for personalized results)",
+        "operationId": "list_contents_contents_get",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/upload": {
+      "post": {
+        "tags": [
+          "STEP 3: Content Upload & Video Generation"
+        ],
+        "summary": "Upload",
+        "description": "STEP 3B: Upload content file (requires authentication)",
+        "operationId": "upload_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/generate-video": {
+      "post": {
+        "tags": [
+          "STEP 3: Content Upload & Video Generation"
+        ],
+        "summary": "Generate Video",
+        "description": "STEP 3C: Generate video one frame per script line",
+        "operationId": "generate_video_generate_video_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_generate_video_generate_video_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VideoGenerationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/content/{content_id}": {
+      "get": {
+        "tags": [
+          "STEP 4: Content Access & Streaming"
+        ],
+        "summary": "Get Content",
+        "description": "STEP 4A: Get content details and access URLs",
+        "operationId": "get_content_content__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/{content_id}/metadata": {
+      "get": {
+        "tags": [
+          "STEP 4: Content Access & Streaming"
+        ],
+        "summary": "Get Content Metadata",
+        "description": "STEP 4A-2: Get detailed content metadata including stats and related data",
+        "operationId": "get_content_metadata_content__content_id__metadata_get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/download/{content_id}": {
+      "get": {
+        "tags": [
+          "STEP 4: Content Access & Streaming"
+        ],
+        "summary": "Download",
+        "description": "STEP 4B: Download content file",
+        "operationId": "download_download__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stream/{content_id}": {
+      "get": {
+        "tags": [
+          "STEP 4: Content Access & Streaming"
+        ],
+        "summary": "Stream Video",
+        "description": "STEP 4C: Stream video content with range support (authentication optional for analytics)",
+        "operationId": "stream_video_stream__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          },
+          {
+            "name": "range_request",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Range Request"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feedback": {
+      "post": {
+        "tags": [
+          "STEP 5: AI Feedback & Tag Recommendations"
+        ],
+        "summary": "Feedback",
+        "description": "STEP 5A: Submit feedback to train RL agent (requires authentication)",
+        "operationId": "feedback_feedback_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FeedbackRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/FeedbackResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/recommend-tags/{content_id}": {
+      "get": {
+        "tags": [
+          "STEP 5: AI Feedback & Tag Recommendations"
+        ],
+        "summary": "Recommend Tags",
+        "description": "STEP 5B: Get AI-powered tag recommendations using Q-Learning agent (authentication optional for personalization)",
+        "operationId": "recommend_tags_recommend_tags__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TagRecommendationResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/average-rating/{content_id}": {
+      "get": {
+        "tags": [
+          "STEP 5: AI Feedback & Tag Recommendations"
+        ],
+        "summary": "Get Average Rating",
+        "description": "STEP 5C: Get average rating for content (authentication optional)",
+        "operationId": "get_average_rating_average_rating__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Metrics",
+        "description": "STEP 6A: View system metrics including RL agent performance",
+        "operationId": "metrics_metrics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetricsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/rl/agent-stats": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Rl Agent Stats",
+        "description": "STEP 6B: View detailed RL agent statistics and Q-table insights (authentication optional)",
+        "operationId": "get_rl_agent_stats_rl_agent_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/lm/stats": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Lm Stats",
+        "description": "STEP 6B: View Language Model and AI component statistics (authentication optional)",
+        "operationId": "get_lm_stats_lm_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/database": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Debug Database",
+        "description": "Debug database connection - PUBLIC ACCESS",
+        "operationId": "debug_database_debug_database_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/logs": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Logs",
+        "description": "STEP 6C: View recent system logs for debugging (Admin Only)",
+        "operationId": "get_logs_logs_get",
+        "parameters": [
+          {
+            "name": "lines",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Lines"
+            }
+          },
+          {
+            "name": "admin_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Admin Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/streaming-performance": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Streaming Performance",
+        "description": "STEP 6D: Real-time streaming analytics (authentication optional)",
+        "operationId": "get_streaming_performance_streaming_performance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/video-stats": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Video Stats",
+        "description": "STEP 6E: Comprehensive content analytics (authentication optional)",
+        "operationId": "get_video_stats_reports_video_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/reports/storyboard-stats": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Storyboard Stats",
+        "description": "STEP 6F: Storyboard generation statistics (authentication optional)",
+        "operationId": "get_storyboard_stats_reports_storyboard_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ingest/webhook": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Webhook Ingest Get",
+        "description": "STEP 6L: Webhook ingestion endpoint info (authentication optional)",
+        "operationId": "webhook_ingest_get_ingest_webhook_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Webhook Ingest Post",
+        "description": "STEP 6K: Webhook endpoint for external content ingestion (authentication optional)",
+        "operationId": "webhook_ingest_post_ingest_webhook_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bucket/stats": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Bucket Stats",
+        "description": "STEP 6F: Storage backend statistics (authentication optional)",
+        "operationId": "get_bucket_stats_bucket_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bucket/list/{segment}": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "List Bucket Files",
+        "description": "STEP 6G: List files in bucket segment (authentication optional)",
+        "operationId": "list_bucket_files_bucket_list__segment__get",
+        "parameters": [
+          {
+            "name": "segment",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Segment"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bhiv/analytics": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Bhiv Analytics",
+        "description": "STEP 6H: Advanced analytics with sentiment analysis (authentication optional)",
+        "operationId": "get_bhiv_analytics_bhiv_analytics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/observability/health": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Observability Health Endpoint",
+        "description": "STEP 6I: Get observability system health status (authentication optional)",
+        "operationId": "get_observability_health_endpoint_observability_health_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/observability/performance": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Get Performance Metrics",
+        "description": "STEP 6J: Get detailed performance metrics (authentication optional)",
+        "operationId": "get_performance_metrics_observability_performance_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/system": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Debug System",
+        "description": "Debug system status",
+        "operationId": "debug_system_debug_system_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/debug/errors": {
+      "get": {
+        "tags": [
+          "STEP 6: Analytics & Performance Monitoring"
+        ],
+        "summary": "Debug Errors",
+        "description": "Debug recent errors",
+        "operationId": "debug_errors_debug_errors_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/{task_id}": {
+      "get": {
+        "tags": [
+          "STEP 7: Task Queue Management"
+        ],
+        "summary": "Get Task Status",
+        "description": "STEP 7A: Get status of a specific task (authentication optional)",
+        "operationId": "get_task_status_tasks__task_id__get",
+        "parameters": [
+          {
+            "name": "task_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Task Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/queue/stats": {
+      "get": {
+        "tags": [
+          "STEP 7: Task Queue Management"
+        ],
+        "summary": "Get Queue Stats",
+        "description": "STEP 7B: Get task queue statistics (authentication optional)",
+        "operationId": "get_queue_stats_tasks_queue_stats_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tasks/create-test": {
+      "post": {
+        "tags": [
+          "STEP 7: Task Queue Management"
+        ],
+        "summary": "Create Test Task",
+        "description": "STEP 7C: Create a test task for queue testing (authentication optional)",
+        "operationId": "create_test_task_tasks_create_test_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bucket/cleanup": {
+      "post": {
+        "tags": [
+          "STEP 8: System Maintenance & Operations"
+        ],
+        "summary": "Cleanup Bucket",
+        "description": "Clean up old files from bucket (requires admin authentication)",
+        "operationId": "cleanup_bucket_bucket_cleanup_post",
+        "parameters": [
+          {
+            "name": "admin_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Admin Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/bucket/rotate-logs": {
+      "post": {
+        "tags": [
+          "STEP 8: System Maintenance & Operations"
+        ],
+        "summary": "Rotate Logs",
+        "description": "Rotate log files (requires admin authentication)",
+        "operationId": "rotate_logs_bucket_rotate_logs_post",
+        "parameters": [
+          {
+            "name": "admin_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Admin Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maintenance/failed-operations": {
+      "get": {
+        "tags": [
+          "STEP 8: System Maintenance & Operations"
+        ],
+        "summary": "Get Failed Operations",
+        "description": "Get list of failed operations (requires admin authentication)",
+        "operationId": "get_failed_operations_maintenance_failed_operations_get",
+        "parameters": [
+          {
+            "name": "admin_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Admin Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/dashboard": {
+      "get": {
+        "tags": [
+          "STEP 9: User Interface & Dashboard"
+        ],
+        "summary": "Get Dashboard",
+        "description": "HTML dashboard for system monitoring",
+        "operationId": "get_dashboard_dashboard_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn/upload-url": {
+      "get": {
+        "tags": [
+          "CDN & Pre-signed URLs"
+        ],
+        "summary": "Generate Upload Url",
+        "description": "Generate pre-signed URL for direct frontend uploads",
+        "operationId": "generate_upload_url_cdn_upload_url_get",
+        "parameters": [
+          {
+            "name": "filename",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          },
+          {
+            "name": "content_type",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "application/octet-stream",
+              "title": "Content Type"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn/download-url/{content_id}": {
+      "get": {
+        "tags": [
+          "CDN & Pre-signed URLs"
+        ],
+        "summary": "Generate Download Url",
+        "description": "Generate pre-signed URL for content downloads",
+        "operationId": "generate_download_url_cdn_download_url__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          },
+          {
+            "name": "expires_in",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 3600,
+              "title": "Expires In"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn/stream-url/{content_id}": {
+      "get": {
+        "tags": [
+          "CDN & Pre-signed URLs"
+        ],
+        "summary": "Generate Stream Url",
+        "description": "Generate optimized streaming URL with CDN support",
+        "operationId": "generate_stream_url_cdn_stream_url__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          },
+          {
+            "name": "expires_in",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 7200,
+              "title": "Expires In"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn/assets/{asset_type}/{filename}": {
+      "get": {
+        "tags": [
+          "CDN & Pre-signed URLs"
+        ],
+        "summary": "Serve Static Assets",
+        "description": "Serve static assets with CDN redirect",
+        "operationId": "serve_static_assets_cdn_assets__asset_type___filename__get",
+        "parameters": [
+          {
+            "name": "asset_type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Asset Type"
+            }
+          },
+          {
+            "name": "filename",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Filename"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/cdn/purge-cache/{content_id}": {
+      "get": {
+        "tags": [
+          "CDN & Pre-signed URLs"
+        ],
+        "summary": "Purge Cdn Cache",
+        "description": "Purge CDN cache for specific content (admin only)",
+        "operationId": "purge_cdn_cache_cdn_purge_cache__content_id__get",
+        "parameters": [
+          {
+            "name": "content_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Content Id"
+            }
+          },
+          {
+            "name": "admin_key",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "title": "Admin Key"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/jinja-dashboard/": {
+      "get": {
+        "tags": [
+          "Jinja Dashboard"
+        ],
+        "summary": "Dashboard",
+        "operationId": "dashboard_jinja_dashboard__get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "AnalyticsResponse": {
+        "properties": {
+          "total_users": {
+            "type": "integer",
+            "title": "Total Users"
+          },
+          "total_content": {
+            "type": "integer",
+            "title": "Total Content"
+          },
+          "total_feedback": {
+            "type": "integer",
+            "title": "Total Feedback"
+          },
+          "average_rating": {
+            "type": "number",
+            "title": "Average Rating"
+          },
+          "average_engagement": {
+            "type": "number",
+            "title": "Average Engagement"
+          },
+          "sentiment_breakdown": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Sentiment Breakdown"
+          },
+          "engagement_rate": {
+            "type": "number",
+            "title": "Engagement Rate"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          }
+        },
+        "type": "object",
+        "required": [
+          "total_users",
+          "total_content",
+          "total_feedback",
+          "average_rating",
+          "average_engagement",
+          "sentiment_breakdown",
+          "engagement_rate",
+          "timestamp"
+        ],
+        "title": "AnalyticsResponse"
+      },
+      "Body_generate_video_generate_video_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "title"
+        ],
+        "title": "Body_generate_video_generate_video_post"
+      },
+      "Body_login_user_users_login_post": {
+        "properties": {
+          "grant_type": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "password"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Grant Type"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "scope": {
+            "type": "string",
+            "title": "Scope",
+            "default": ""
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "Body_login_user_users_login_post"
+      },
+      "Body_upload_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "file",
+          "title"
+        ],
+        "title": "Body_upload_upload_post"
+      },
+      "ContentResponse": {
+        "properties": {
+          "content_id": {
+            "type": "string",
+            "title": "Content Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "file_path": {
+            "type": "string",
+            "title": "File Path"
+          },
+          "content_type": {
+            "type": "string",
+            "title": "Content Type"
+          },
+          "authenticity_score": {
+            "type": "number",
+            "title": "Authenticity Score"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tags"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content_id",
+          "title",
+          "description",
+          "file_path",
+          "content_type",
+          "authenticity_score",
+          "tags",
+          "next_step"
+        ],
+        "title": "ContentResponse"
+      },
+      "FeedbackRequest": {
+        "properties": {
+          "content_id": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Content Id"
+          },
+          "rating": {
+            "type": "integer",
+            "maximum": 5.0,
+            "minimum": 1.0,
+            "title": "Rating"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content_id",
+          "rating"
+        ],
+        "title": "FeedbackRequest"
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "rating": {
+            "type": "integer",
+            "title": "Rating"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "reward": {
+            "type": "number",
+            "title": "Reward"
+          },
+          "rl_training": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rl Training"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status",
+          "rating",
+          "event_type",
+          "reward",
+          "rl_training",
+          "next_step"
+        ],
+        "title": "FeedbackResponse"
+      },
+      "HTTPValidationError": {
+        "title": "HTTPValidationError",
+        "type": "object",
+        "properties": {
+          "detail": {
+            "title": "Detail",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            }
+          }
+        }
+      },
+      "MetricsResponse": {
+        "properties": {
+          "system_metrics": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "System Metrics"
+          },
+          "rl_agent_metrics": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Rl Agent Metrics"
+          },
+          "timestamp": {
+            "type": "string",
+            "title": "Timestamp"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "system_metrics",
+          "rl_agent_metrics",
+          "timestamp",
+          "next_step"
+        ],
+        "title": "MetricsResponse"
+      },
+      "RefreshToken": {
+        "properties": {
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "refresh_token"
+        ],
+        "title": "RefreshToken"
+      },
+      "TagRecommendationResponse": {
+        "properties": {
+          "content_id": {
+            "type": "string",
+            "title": "Content Id"
+          },
+          "recommended_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Recommended Tags"
+          },
+          "original_tags": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Original Tags"
+          },
+          "rl_action_taken": {
+            "type": "string",
+            "title": "Rl Action Taken"
+          },
+          "authenticity_score": {
+            "type": "number",
+            "title": "Authenticity Score"
+          },
+          "agent_confidence": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Agent Confidence"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content_id",
+          "recommended_tags",
+          "original_tags",
+          "rl_action_taken",
+          "authenticity_score",
+          "agent_confidence",
+          "next_step"
+        ],
+        "title": "TagRecommendationResponse"
+      },
+      "Token": {
+        "properties": {
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "refresh_token": {
+            "type": "string",
+            "title": "Refresh Token"
+          },
+          "token_type": {
+            "type": "string",
+            "title": "Token Type"
+          },
+          "expires_in": {
+            "type": "integer",
+            "title": "Expires In"
+          },
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "username": {
+            "type": "string",
+            "title": "Username"
+          }
+        },
+        "type": "object",
+        "required": [
+          "access_token",
+          "refresh_token",
+          "token_type",
+          "expires_in",
+          "user_id",
+          "username"
+        ],
+        "title": "Token"
+      },
+      "UserRegister": {
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 50,
+            "minLength": 3,
+            "title": "Username"
+          },
+          "password": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 6,
+            "title": "Password"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "UserRegister"
+      },
+      "ValidationError": {
+        "title": "ValidationError",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "type": "object",
+        "properties": {
+          "loc": {
+            "title": "Location",
+            "type": "array",
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            }
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        }
+      },
+      "VideoGenerationResponse": {
+        "properties": {
+          "content_id": {
+            "type": "string",
+            "title": "Content Id"
+          },
+          "video_path": {
+            "type": "string",
+            "title": "Video Path"
+          },
+          "stream_url": {
+            "type": "string",
+            "title": "Stream Url"
+          },
+          "local_file_path": {
+            "type": "string",
+            "title": "Local File Path"
+          },
+          "storyboard_stats": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Storyboard Stats"
+          },
+          "processing_status": {
+            "type": "string",
+            "title": "Processing Status"
+          },
+          "next_step": {
+            "type": "string",
+            "title": "Next Step"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content_id",
+          "video_path",
+          "stream_url",
+          "local_file_path",
+          "storyboard_stats",
+          "processing_status",
+          "next_step"
+        ],
+        "title": "VideoGenerationResponse"
+      }
+    },
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    }
+  }
+}

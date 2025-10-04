@@ -1,0 +1,80 @@
+{
+  "overall_success": false,
+  "total_checks": 9,
+  "successful_checks": 0,
+  "success_rate": 0.0,
+  "timestamp": "2025-09-25T06:53:44.213789",
+  "base_url": "https://ai-agent-aff6.onrender.com",
+  "detailed_results": [
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:52:17.571111"
+    },
+    {
+      "endpoint": "/docs",
+      "url": "https://ai-agent-aff6.onrender.com/docs",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:52:28.731779"
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "https://ai-agent-aff6.onrender.com/metrics",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:52:42.292929"
+    },
+    {
+      "endpoint": "/",
+      "url": "https://ai-agent-aff6.onrender.com/",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:52:55.877748"
+    },
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:53:06.320190"
+    },
+    {
+      "endpoint": "/demo-login",
+      "url": "https://ai-agent-aff6.onrender.com/demo-login",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:53:19.896356"
+    },
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:53:33.680764"
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "https://ai-agent-aff6.onrender.com/metrics",
+      "success": false,
+      "error": "Request timeout",
+      "response_time_ms": 10000,
+      "timestamp": "2025-09-25T06:53:44.213789"
+    },
+    {
+      "check_type": "performance",
+      "success": false,
+      "error": "No successful requests for performance measurement",
+      "timestamp": "2025-09-25T06:53:44.213789"
+    }
+  ]
+}

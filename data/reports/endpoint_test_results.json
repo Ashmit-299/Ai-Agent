@@ -1,0 +1,147 @@
+{
+  "timestamp": 1759210075.125852,
+  "base_url": "http://localhost:8000",
+  "total_endpoints": 14,
+  "successful_endpoints": 14,
+  "success_rate": 100.0,
+  "results": {
+    "/": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2.933,
+      "content_length": 989
+    },
+    "/health": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2057.334,
+      "content_length": 197
+    },
+    "/demo-login": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2755.259,
+      "content_length": 502
+    },
+    "/test": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2048.387,
+      "content_length": 356
+    },
+    "/debug-auth": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2056.892,
+      "content_length": 171
+    },
+    "/users/profile": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2365.543,
+      "content_length": 148
+    },
+    "/contents": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2289.356,
+      "content_length": 3687
+    },
+    "/metrics": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 4391.256,
+      "content_length": 400
+    },
+    "/bhiv/analytics": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 3035.826,
+      "content_length": 186
+    },
+    "/observability/health": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2043.269,
+      "content_length": 1858
+    },
+    "/observability/performance": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2054.883,
+      "content_length": 1644
+    },
+    "/tasks/queue/stats": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2054.1040000000003,
+      "content_length": 178
+    },
+    "/dashboard": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2681.8590000000004,
+      "content_length": 2318
+    },
+    "/bucket/stats": {
+      "status": "success",
+      "status_code": 200,
+      "response_time_ms": 2045.249,
+      "content_length": 302
+    }
+  },
+  "slow_endpoints": [
+    [
+      "/health",
+      2057.334
+    ],
+    [
+      "/demo-login",
+      2755.259
+    ],
+    [
+      "/test",
+      2048.387
+    ],
+    [
+      "/debug-auth",
+      2056.892
+    ],
+    [
+      "/users/profile",
+      2365.543
+    ],
+    [
+      "/contents",
+      2289.356
+    ],
+    [
+      "/metrics",
+      4391.256
+    ],
+    [
+      "/bhiv/analytics",
+      3035.826
+    ],
+    [
+      "/observability/health",
+      2043.269
+    ],
+    [
+      "/observability/performance",
+      2054.883
+    ],
+    [
+      "/tasks/queue/stats",
+      2054.1040000000003
+    ],
+    [
+      "/dashboard",
+      2681.8590000000004
+    ],
+    [
+      "/bucket/stats",
+      2045.249
+    ]
+  ]
+}

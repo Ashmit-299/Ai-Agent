@@ -1,0 +1,8 @@
+Title: Introduction to Linear Regression
+
+Welcome to this short lesson on linear regression.
+In this video, we'll cover:
+1) What is linear regression?
+2) The simple linear model y = mx + b.
+3) How loss is measured with mean squared error.
+Thank you for watching — try implementing a simple regression now!

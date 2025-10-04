@@ -1,0 +1,31 @@
+{
+  "database": {
+    "connection_pool_size": 5,
+    "query_timeout": 30,
+    "enable_wal_mode": true
+  },
+  "file_handling": {
+    "max_file_size_mb": 100,
+    "allowed_extensions": [
+      ".mp4",
+      ".mp3",
+      ".wav",
+      ".jpg",
+      ".jpeg",
+      ".png",
+      ".txt",
+      ".pdf"
+    ],
+    "chunk_size_kb": 1024
+  },
+  "performance": {
+    "cache_duration_seconds": 300,
+    "max_concurrent_uploads": 3,
+    "enable_compression": true
+  },
+  "monitoring": {
+    "log_level": "INFO",
+    "metrics_retention_days": 30,
+    "enable_performance_tracking": true
+  }
+}

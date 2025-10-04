@@ -1,0 +1,9 @@
+{
+  "content_id": "test123",
+  "rating": 1,
+  "user_id": "user1",
+  "comment": null,
+  "sentiment": "negative",
+  "engagement_score": 0.4,
+  "ts": 1759207716
+}

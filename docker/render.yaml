@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: ai-uploader-agent
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: JWS_SECRET
+        value: SJOYupb2v8rFU8nd3+B7G/5Y90BB+x0ihG+vTZ6M3lcAKnC0ThJtBEQvZz5ZgigQ+ZC96vAbmJQ0+1FMtLmqUw==
+      - key: DATABASE_URL
+        value: postgresql://postgres.dusqpdhojbgfxwflukhc:Moto%40Roxy123@aws-1-ap-south-1.pooler.supabase.com:6543/postgres
+      - key: POSTHOG_API_KEY
+        value: phc_lmGvuDZ7JiyjDmkL1T6Wy3TvDHgFdjt1zlH02fVziwU
+      - key: SENTRY_DSN
+        value: https://0d595f5827bf2a4ae5da7d1ed1a09338@o4509949438328832.ingest.us.sentry.io/4510035576946688
+      - key: JWT_SECRET_KEY
+        value: SJOYupb2v8rFU8nd3+B7G/5Y90BB+x0ihG+vTZ6M3lcAKnC0ThJtBEQvZz5ZgigQ+ZC96vAbmJQ0+1FMtLmqUw==
+      - key: PERPLEXITY_API_KEY
+        from: secret
+      - key: BHIV_LM_URL
+        value: https://api.perplexity.ai
+      - key: BHIV_STORAGE_BACKEND
+        value: local
+    disk:
+      name: ai-uploader-data
+      mountPath: /opt/render/project/src/data
+      sizeGB: 2

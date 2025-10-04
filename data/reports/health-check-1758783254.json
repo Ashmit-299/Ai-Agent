@@ -1,0 +1,155 @@
+{
+  "overall_success": false,
+  "total_checks": 10,
+  "successful_checks": 6,
+  "success_rate": 60.0,
+  "timestamp": "2025-09-25T06:54:14.890768",
+  "base_url": "https://ai-agent-aff6.onrender.com",
+  "detailed_results": [
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 1605.03,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:03.530691",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation"
+      }
+    },
+    {
+      "endpoint": "/docs",
+      "url": "https://ai-agent-aff6.onrender.com/docs",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 702.48,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:04.234167",
+      "response_text": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"https://"
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "https://ai-agent-aff6.onrender.com/metrics",
+      "status_code": 401,
+      "expected_status": 200,
+      "response_time_ms": 730.61,
+      "success": false,
+      "timestamp": "2025-09-25T06:54:04.965548",
+      "response_data": {
+        "detail": "Not authenticated"
+      },
+      "error": "Expected 200, got 401"
+    },
+    {
+      "endpoint": "/",
+      "url": "https://ai-agent-aff6.onrender.com/",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 1059.2,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:06.025770",
+      "response_text": "\n    <!DOCTYPE html>\n    <html>\n    <head>\n    <link type=\"text/css\" rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css\">\n    <link rel=\"shortcut icon\" href=\"https://"
+    },
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 736.1,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:06.761866",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation"
+      }
+    },
+    {
+      "endpoint": "/demo-login",
+      "url": "https://ai-agent-aff6.onrender.com/demo-login",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 689.61,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:07.451473",
+      "response_data": {
+        "demo_credentials": {
+          "username": "demo",
+          "password": "demo123"
+        },
+        "next_step": "POST /users/login with these credentials to get access token"
+      }
+    },
+    {
+      "endpoint": "/users/login",
+      "success": false,
+      "status_code": 401,
+      "timestamp": "2025-09-25T06:54:10.831487"
+    },
+    {
+      "endpoint": "/health",
+      "url": "https://ai-agent-aff6.onrender.com/health",
+      "status_code": 200,
+      "expected_status": 200,
+      "response_time_ms": 2945.08,
+      "success": true,
+      "timestamp": "2025-09-25T06:54:13.776570",
+      "response_data": {
+        "status": "healthy",
+        "service": "AI Content Uploader Agent",
+        "version": "1.0.0",
+        "environment_valid": true,
+        "config_warnings": 0,
+        "message": "Use /docs for API documentation"
+      }
+    },
+    {
+      "endpoint": "/metrics",
+      "url": "https://ai-agent-aff6.onrender.com/metrics",
+      "status_code": 401,
+      "expected_status": 200,
+      "response_time_ms": 1113.15,
+      "success": false,
+      "timestamp": "2025-09-25T06:54:14.890768",
+      "response_data": {
+        "detail": "Not authenticated"
+      },
+      "error": "Expected 200, got 401"
+    },
+    {
+      "check_type": "performance",
+      "avg_response_time_ms": 2945.08,
+      "max_response_time_ms": 2945.08,
+      "slow_endpoints": [
+        {
+          "endpoint": "/health",
+          "url": "https://ai-agent-aff6.onrender.com/health",
+          "status_code": 200,
+          "expected_status": 200,
+          "response_time_ms": 2945.08,
+          "success": true,
+          "timestamp": "2025-09-25T06:54:13.776570",
+          "response_data": {
+            "status": "healthy",
+            "service": "AI Content Uploader Agent",
+            "version": "1.0.0",
+            "environment_valid": true,
+            "config_warnings": 0,
+            "message": "Use /docs for API documentation"
+          }
+        }
+      ],
+      "success": false,
+      "timestamp": "2025-09-25T06:54:14.890768"
+    }
+  ]
+}
