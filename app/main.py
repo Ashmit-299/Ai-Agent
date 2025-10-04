@@ -52,6 +52,15 @@ except ImportError:
     
     audit_logger = AuditLogger()
 
+# Import global authentication middleware
+try:
+    from .auth_middleware import GlobalAuthMiddleware
+except ImportError:
+    from starlette.middleware.base import BaseHTTPMiddleware
+    class GlobalAuthMiddleware(BaseHTTPMiddleware):
+        async def dispatch(self, request, call_next):
+            return await call_next(request)
+
 try:
     from .jwks_auth import (
         get_current_user_supabase as get_current_user_required_supabase,
@@ -281,9 +290,8 @@ def get_openapi_schema():
         
         # Add global authentication to all endpoints except public ones
         public_paths = [
-            "/", "/users/register", "/users/login", "/demo-login", "/health", 
-            "/docs", "/openapi.json", "/redoc", "/debug/database", "/test",
-            "/debug-auth", "/docs/oauth2-redirect", "/metrics", "/metrics/prometheus", "/metrics/performance"
+            "/health", "/docs", "/openapi.json", "/redoc", "/docs/oauth2-redirect",
+            "/users/login", "/users/register", "/demo-login"  # Keep auth endpoints public
         ]
         
         if "paths" in openapi_schema:
@@ -558,6 +566,9 @@ async def debug_routes():
             "message": "Failed to enumerate routes",
             "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
         }
+
+# Add global authentication middleware (FIRST - before other middleware)
+app.add_middleware(GlobalAuthMiddleware)
 
 # Add new middleware for endpoint hardening
 app.add_middleware(RequestIDMiddleware)
