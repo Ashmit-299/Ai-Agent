@@ -677,6 +677,26 @@ async def metrics_info():
         "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
     }
 
+@app.get("/monitoring-status")
+async def monitoring_status():
+    """Get monitoring system status"""
+    try:
+        sentry_configured = bool(os.getenv("SENTRY_DSN"))
+        posthog_configured = bool(os.getenv("POSTHOG_API_KEY"))
+        monitoring_healthy = sentry_configured or posthog_configured
+        
+        return {
+            "status": "healthy" if monitoring_healthy else "limited",
+            "monitoring_systems": {
+                "sentry": {"configured": sentry_configured},
+                "posthog": {"configured": posthog_configured},
+                "prometheus": {"available": PROMETHEUS_AVAILABLE}
+            },
+            "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
+        }
+    except Exception as e:
+        return {"status": "error", "error": str(e), "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')}
+
 @app.middleware("http")
 async def simple_middleware(request: Request, call_next):
     """Simple middleware for performance tracking"""
