@@ -207,7 +207,7 @@ jobs:
 
       - name: 📊 Upload Security Reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: security-reports
           path: |
@@ -357,7 +357,7 @@ jobs:
 
       - name: 📤 Upload Coverage Reports
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: coverage-reports
           path: |
@@ -419,7 +419,7 @@ jobs:
 
       - name: 📊 Upload Pre-Production Report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: pre-production-report
           path: production-readiness-report.json
@@ -558,7 +558,7 @@ jobs:
 
       - name: 📊 Upload Deployment Validation Report
         if: always()
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: deployment-validation-report
           path: deployment-validation-report.json
@@ -628,7 +628,7 @@ jobs:
     
     steps:
       - name: 📥 Download All Reports
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           path: reports/
       
