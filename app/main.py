@@ -730,7 +730,9 @@ except Exception as e:
 
 # Mount static files for generated videos
 try:
-    app.mount("/generated", StaticFiles(directory="/tmp"), name="generated")
+    import tempfile
+    temp_dir = tempfile.gettempdir()
+    app.mount("/generated", StaticFiles(directory=temp_dir), name="generated")
 except Exception:
     pass  # Skip if directory doesn't exist
 

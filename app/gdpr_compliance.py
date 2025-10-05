@@ -417,7 +417,16 @@ class GDPRDataManager:
                 conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                 cur = conn.cursor()
                 
-                cur.execute(f"DELETE FROM {table} WHERE {user_column} = %s", (user_id,))
+                # Validate table and column names to prevent SQL injection
+                allowed_tables = {'content', 'feedback', 'scripts', 'analytics', 'audit_logs', 'system_logs'}
+                allowed_columns = {'user_id', 'uploader_id'}
+                
+                if table not in allowed_tables or user_column not in allowed_columns:
+                    raise ValueError(f"Invalid table or column: {table}.{user_column}")
+                
+                # Use string formatting only for validated table/column names
+                query = f"DELETE FROM {table} WHERE {user_column} = %s"
+                cur.execute(query, (user_id,))
                 deleted_count = cur.rowcount
                 
                 conn.commit()
@@ -597,7 +606,16 @@ async def get_user_data_summary(
                     conn = psycopg2.connect(os.getenv("DATABASE_URL"))
                     cur = conn.cursor()
                     
-                    cur.execute(f"SELECT COUNT(*) FROM {table} WHERE {user_column} = %s", (user_id,))
+                    # Validate table and column names to prevent SQL injection
+                    allowed_tables = {'content', 'feedback', 'scripts', 'analytics', 'audit_logs'}
+                    allowed_columns = {'user_id', 'uploader_id'}
+                    
+                    if table not in allowed_tables or user_column not in allowed_columns:
+                        raise ValueError(f"Invalid table or column: {table}.{user_column}")
+                    
+                    # Use string formatting only for validated table/column names
+                    query = f"SELECT COUNT(*) FROM {table} WHERE {user_column} = %s"
+                    cur.execute(query, (user_id,))
                     count = cur.fetchone()[0]
                     
                     summary["data_summary"][table] = count
