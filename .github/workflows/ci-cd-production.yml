@@ -120,17 +120,17 @@ jobs:
             
             # Verify database is empty
             python -c "
-            import psycopg2
-            import os
-            conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-            cur = conn.cursor()
-            cur.execute(\"SELECT table_name FROM information_schema.tables WHERE table_schema = 'public' AND table_name != 'alembic_version';\")
-            tables = cur.fetchall()
-            if tables:
-                print(f'⚠️ Tables still exist after rollback: {[t[0] for t in tables]}')
-            else:
-                print('✅ All tables successfully removed')
-            conn.close()
+import psycopg2
+import os
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+cur = conn.cursor()
+cur.execute('SELECT table_name FROM information_schema.tables WHERE table_schema = \"public\" AND table_name != \"alembic_version\"')
+tables = cur.fetchall()
+if tables:
+    print(f'⚠️ Tables still exist after rollback: {[t[0] for t in tables]}')
+else:
+    print('✅ All tables successfully removed')
+conn.close()
             "
             
             # Roll forward again
@@ -140,19 +140,19 @@ jobs:
             
             # Verify tables are back
             python -c "
-            import psycopg2
-            import os
-            conn = psycopg2.connect(os.getenv('DATABASE_URL'))
-            cur = conn.cursor()
-            required_tables = ['user', 'content', 'feedback', 'script', 'analytics', 'system_logs', 'audit_logs']
-            for table in required_tables:
-                cur.execute('SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = %s);', (table,))
-                exists = cur.fetchone()[0]
-                if exists:
-                    print(f'✅ Table {table} restored')
-                else:
-                    print(f'❌ Table {table} missing after restore')
-            conn.close()
+import psycopg2
+import os
+conn = psycopg2.connect(os.getenv('DATABASE_URL'))
+cur = conn.cursor()
+required_tables = ['user', 'content', 'feedback', 'script', 'analytics', 'system_logs', 'audit_logs']
+for table in required_tables:
+    cur.execute('SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = %s)', (table,))
+    exists = cur.fetchone()[0]
+    if exists:
+        print(f'✅ Table {table} restored')
+    else:
+        print(f'❌ Table {table} missing after restore')
+conn.close()
             "
           else
             echo "⚠️ No current migration found, skipping rollback test"
