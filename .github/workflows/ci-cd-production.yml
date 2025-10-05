@@ -165,8 +165,7 @@ conn.close()
           echo "::group::Migration Status Report"
           echo "## 🗄️ Database Migration Report" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY  
-          echo "|-------|--------|
-          " >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
           
           if [ "${{ steps.migration_check.outcome }}" = "success" ]; then
             echo "| Migration Check | ✅ PASSED |" >> $GITHUB_STEP_SUMMARY
