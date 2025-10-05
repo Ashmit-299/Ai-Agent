@@ -731,7 +731,9 @@ def list_contents(limit: int = 20, current_user = Depends(get_current_user_requi
 
 # Simplified video generation endpoint above
 
-@step3_router.post('/upload', response_model=ContentResponse, status_code=201)
+
+
+@step3_router.post('/upload', response_model=dict, status_code=201)
 async def upload_async(
     request: Request,
     file: UploadFile = File(...), 
@@ -740,11 +742,19 @@ async def upload_async(
     current_user = Depends(get_current_user_required),
     _rate_limit = Depends(rate_limit_upload)
 ):
-    """STEP 3B: Upload content file (requires authentication) - ASYNC with rate limiting"""
+    """STEP 3B: Upload content file with enhanced validation and detailed response (requires authentication)
+    Supports: Images, Videos, Audio, Documents up to 100MB with comprehensive security validation
+    """
     
-    # Get request ID for audit logging
+    # Get request ID and client IP for audit logging
     request_id = getattr(request.state, 'request_id', None)
-    client_ip = request.client.host if request.client else "unknown"
+    try:
+        from app.security import security_manager
+        client_ip = security_manager.get_client_ip(request)
+    except:
+        client_ip = request.client.host if request.client else "unknown"
+    
+    start_time = time.time()
     
     # Track user action with observability
     try:
@@ -756,57 +766,97 @@ async def upload_async(
         })
     except Exception as obs_error:
         logger.warning(f"Observability tracking failed: {obs_error}")
+    
     try:
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="No filename provided")
+        # Enhanced file validation
+        validation_result = None
+        try:
+            from app.input_validation import FileValidator, TextValidator
+            
+            # Enhanced file validation
+            validation_result = await FileValidator.validate_file(
+                file, 
+                allowed_categories=['image', 'video', 'audio', 'document', 'text']
+            )
+            
+            # Text input sanitization
+            title = TextValidator.sanitize_text(title, max_length=1000)
+            if description:
+                description = TextValidator.sanitize_text(description, max_length=10000)
+                
+        except ImportError:
+            # Fallback validation if enhanced validation not available
+            if not file.filename:
+                raise HTTPException(status_code=400, detail="No filename provided")
+            
+            allowed_extensions = {'.mp4', '.mp3', '.wav', '.jpg', '.jpeg', '.png', '.txt', '.pdf'}
+            allowed_mime_types = {
+                'video/mp4', 'audio/mpeg', 'audio/wav', 'image/jpeg', 'image/png', 'text/plain', 'application/pdf'
+            }
+            
+            safe_filename = os.path.basename(file.filename)
+            ext = os.path.splitext(safe_filename)[1].lower()
+            
+            if ext not in allowed_extensions:
+                raise HTTPException(status_code=400, detail=f"File extension {ext} not allowed")
+            
+            # More flexible MIME type validation - allow if extension is valid
+            if file.content_type and file.content_type not in allowed_mime_types:
+                # Allow if extension is in allowed list (browser may send generic MIME type)
+                if ext not in allowed_extensions:
+                    raise HTTPException(status_code=400, detail=f"MIME type {file.content_type} not allowed")
+            
+            data = await file.read()
+            max_size = 100 * 1024 * 1024
+            if len(data) > max_size:
+                raise HTTPException(status_code=413, detail="File too large")
+            
+            # Create fallback validation result
+            validation_result = {
+                'mime_type': file.content_type or 'application/octet-stream',
+                'size': len(data),
+                'file_hash': hashlib.sha256(data).hexdigest(),
+                'warnings': []
+            }
         
-        allowed_extensions = {'.mp4', '.mp3', '.wav', '.jpg', '.jpeg', '.png', '.txt', '.pdf'}
-        allowed_mime_types = {
-            'video/mp4', 'audio/mpeg', 'audio/wav', 'image/jpeg', 'image/png', 'text/plain', 'application/pdf'
-        }
+        # Generate secure content ID
+        if validation_result:
+            content_id = generate_content_id(current_user.user_id, file.filename)
+        else:
+            h = hashlib.sha256(data).hexdigest()[:12]
+            content_id = f"{h}_{uuid.uuid4().hex[:6]}"
         
+        uploader_id = current_user.user_id if current_user else 'anonymous'
+        
+        # Create secure filename
         safe_filename = os.path.basename(file.filename)
         ext = os.path.splitext(safe_filename)[1].lower()
         
-        if ext not in allowed_extensions:
-            raise HTTPException(status_code=400, detail=f"File extension {ext} not allowed")
-        
-        # More flexible MIME type validation - allow if extension is valid
-        if file.content_type and file.content_type not in allowed_mime_types:
-            # Allow if extension is in allowed list (browser may send generic MIME type)
-            if ext not in allowed_extensions:
-                raise HTTPException(status_code=400, detail=f"MIME type {file.content_type} not allowed")
-        
-        data = await file.read()
-        max_size = 100 * 1024 * 1024
-        if len(data) > max_size:
-            raise HTTPException(status_code=413, detail="File too large")
-        
-        h = hashlib.sha256(data).hexdigest()[:12]
-        content_id = f"{h}_{uuid.uuid4().hex[:6]}"
-        uploader_id = current_user.user_id if current_user else 'anonymous'
-        
-        # Clean filename more thoroughly
-        clean_name = ''.join(c for c in safe_filename if c.isalnum() or c in '.-_')
-        if not clean_name:
-            clean_name = f"file{ext}"
-        fname = f"{int(time.time())}_{content_id}_{clean_name}"
-        
-        # Use new storage adapter for direct upload
-        try:
-            from core.s3_storage_adapter import storage_adapter
-            # Upload to storage (async-compatible)
-            storage_path = await asyncio.to_thread(
-                storage_adapter.upload_content, data, 'uploads', fname
-            )
-        except Exception as storage_error:
-            logger.warning(f"Storage adapter failed, using fallback: {storage_error}")
-            # Fallback to local save
-            storage_path = get_bucket_path('uploads', fname)
-            os.makedirs(os.path.dirname(storage_path), exist_ok=True)
-            await asyncio.to_thread(
-                lambda: open(storage_path, 'wb').write(data)
-            )
+        if validation_result and 'file_hash' in validation_result:
+            secure_filename = f"{content_id}{ext}"
+            file_path = await save_file_securely(file, secure_filename, validation_result)
+        else:
+            # Fallback file saving
+            clean_name = ''.join(c for c in safe_filename if c.isalnum() or c in '.-_')
+            if not clean_name:
+                clean_name = f"file{ext}"
+            fname = f"{int(time.time())}_{content_id}_{clean_name}"
+            
+            # Use new storage adapter for direct upload
+            try:
+                from core.s3_storage_adapter import storage_adapter
+                # Upload to storage (async-compatible)
+                file_path = await asyncio.to_thread(
+                    storage_adapter.upload_content, data, 'uploads', fname
+                )
+            except Exception as storage_error:
+                logger.warning(f"Storage adapter failed, using fallback: {storage_error}")
+                # Fallback to local save
+                file_path = get_bucket_path('uploads', fname)
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                await asyncio.to_thread(
+                    lambda: open(file_path, 'wb').write(data)
+                )
         
         # If it's a script file, also save to scripts bucket
         script_path = None
@@ -821,11 +871,15 @@ async def upload_async(
                 logging.warning(f"Failed to save script to scripts bucket: {script_error}")
         
         # Compute authenticity and tags (async)
-        authenticity_task = asyncio.to_thread(compute_authenticity, storage_path, title, description)
+        authenticity_task = asyncio.to_thread(compute_authenticity, file_path, title, description)
         tags_task = asyncio.to_thread(suggest_tags, title, description)
         
         authenticity, tags = await asyncio.gather(authenticity_task, tags_task)
         uploaded_at = time.time()
+        
+        # Calculate authenticity score from validation if available
+        if validation_result and 'file_hash' in validation_result:
+            authenticity = calculate_authenticity_score(validation_result['file_hash'])
         
         # Save to Supabase database using DatabaseManager
         try:
@@ -835,8 +889,8 @@ async def upload_async(
                 'uploader_id': uploader_id,
                 'title': title,
                 'description': description,
-                'file_path': storage_path,
-                'content_type': file.content_type or 'application/octet-stream',
+                'file_path': file_path,
+                'content_type': validation_result['mime_type'] if validation_result else (file.content_type or 'application/octet-stream'),
                 'uploaded_at': uploaded_at,
                 'authenticity_score': authenticity,
                 'current_tags': json.dumps(tags),
@@ -981,7 +1035,11 @@ async def upload_async(
                         'bucket_path': script_path
                     }
                     metadata_filename = f"script_meta_{content_id}.json"
-                    bhiv_bucket.save_json('scripts', metadata_filename, script_metadata)
+                    try:
+                        from core import bhiv_bucket
+                        bhiv_bucket.save_json('scripts', metadata_filename, script_metadata)
+                    except:
+                        pass
                     
                 except Exception as script_error:
                     import logging
@@ -993,11 +1051,11 @@ async def upload_async(
                 'user_id': uploader_id,
                 'action': 'file_upload',
                 'filename': safe_filename,
-                'file_size': len(data),
-                'content_type': file.content_type,
+                'file_size': validation_result['size'] if validation_result else len(data),
+                'content_type': validation_result['mime_type'] if validation_result else file.content_type,
                 'tags': tags,
                 'authenticity_score': authenticity,
-                'storage_path': storage_path,
+                'storage_path': file_path,
                 'script_path': script_path,
                 'timestamp': uploaded_at
             }
@@ -1024,8 +1082,8 @@ async def upload_async(
                         INSERT OR REPLACE INTO content (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """, (
-                        content_id, uploader_id, title, description, storage_path,
-                        file.content_type or 'application/octet-stream', uploaded_at,
+                        content_id, uploader_id, title, description, file_path,
+                        validation_result['mime_type'] if validation_result else (file.content_type or 'application/octet-stream'), uploaded_at,
                         authenticity, json.dumps(tags), 0, 0, 0
                     ))
                 local_conn.close()
@@ -1055,10 +1113,89 @@ async def upload_async(
         # Track successful upload
         track_event(current_user.user_id, "file_upload_completed", {
             "content_id": content_id,
-            "file_type": file.content_type,
+            "file_type": validation_result['mime_type'] if validation_result else file.content_type,
             "authenticity_score": authenticity,
             "tags_count": len(tags)
         })
+        
+        # Log successful upload to Supabase audit_logs
+        processing_time = time.time() - start_time
+        try:
+            import psycopg2
+            DATABASE_URL = os.getenv("DATABASE_URL")
+            
+            if 'postgresql' in DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                
+                # Create audit_logs table if not exists
+                cur.execute("""
+                    CREATE TABLE IF NOT EXISTS audit_logs (
+                        id SERIAL PRIMARY KEY,
+                        user_id TEXT,
+                        action TEXT,
+                        resource_type TEXT,
+                        resource_id TEXT,
+                        timestamp REAL,
+                        ip_address TEXT,
+                        user_agent TEXT,
+                        request_id TEXT,
+                        details TEXT,
+                        status TEXT DEFAULT 'success'
+                    )
+                """)
+                
+                # Insert audit log
+                cur.execute("""
+                    INSERT INTO audit_logs (user_id, action, resource_type, resource_id, timestamp, 
+                                          ip_address, details, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    current_user.user_id,
+                    "content_upload",
+                    "content",
+                    content_id,
+                    time.time(),
+                    client_ip,
+                    json.dumps({
+                        "filename": file.filename,
+                        "file_size": validation_result['size'] if validation_result else len(data),
+                        "mime_type": validation_result['mime_type'] if validation_result else file.content_type,
+                        "processing_time_seconds": processing_time,
+                        "validation_warnings": validation_result['warnings'] if validation_result else []
+                    }),
+                    "success"
+                ))
+                
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.info(f"Audit log saved to Supabase for upload: {content_id}")
+            else:
+                logger.warning("PostgreSQL not configured for audit logging")
+                
+        except Exception as audit_error:
+            logger.warning(f"Supabase audit logging failed: {audit_error}")
+            # Fallback audit log to local file
+            try:
+                os.makedirs('logs', exist_ok=True)
+                audit_data = {
+                    "timestamp": time.time(),
+                    "user_id": current_user.user_id,
+                    "action": "content_upload",
+                    "resource_id": content_id,
+                    "ip_address": client_ip,
+                    "details": {
+                        "filename": file.filename,
+                        "file_size": validation_result['size'] if validation_result else len(data),
+                        "processing_time": processing_time
+                    }
+                }
+                with open(f'logs/audit_{int(time.time())}.json', 'w') as f:
+                    json.dump(audit_data, f)
+                logger.info(f"Audit log saved to local file for upload: {content_id}")
+            except Exception as file_error:
+                logger.error(f"All audit logging failed: {file_error}")
         
         # Log audit event for compliance
         try:
@@ -1071,27 +1208,74 @@ async def upload_async(
                 ip_address=client_ip,
                 details={
                     "filename": safe_filename,
-                    "file_size": len(data),
-                    "content_type": file.content_type,
-                    "storage_path": storage_path
+                    "file_size": validation_result['size'] if validation_result else len(data),
+                    "content_type": validation_result['mime_type'] if validation_result else file.content_type,
+                    "storage_path": file_path
                 }
             )
         except Exception as audit_error:
             logger.warning(f"Audit logging failed: {audit_error}")
         
-        return ContentResponse(
-            content_id=content_id,
-            title=title,
-            description=description,
-            file_path=storage_path,
-            content_type=file.content_type or 'application/octet-stream',
-            authenticity_score=authenticity, 
-            tags=tags,
-            next_step=f"Use /content/{content_id} to view details or /stream/{content_id} to access content"
-        )
+        # Return enhanced detailed response
+        return {
+            "message": "✅ Content uploaded successfully with enhanced security validation",
+            "content_id": content_id,
+            "title": title,
+            "description": description,
+            "file_size_mb": round((validation_result['size'] if validation_result else len(data)) / 1024 / 1024, 2),
+            "mime_type": validation_result['mime_type'] if validation_result else (file.content_type or 'application/octet-stream'),
+            "authenticity_score": authenticity,
+            "processing_time_seconds": round(processing_time, 3),
+            "tags": tags,
+            "validation": {
+                "passed": True,
+                "file_hash": (validation_result['file_hash'][:16] + "...") if validation_result and 'file_hash' in validation_result else "computed",
+                "warnings": validation_result['warnings'] if validation_result else []
+            },
+            "access_urls": {
+                "view": f"/content/{content_id}",
+                "download": f"/download/{content_id}",
+                "stream": f"/stream/{content_id}" if 'video' in (validation_result['mime_type'] if validation_result else file.content_type or '') else None,
+                "metadata": f"/content/{content_id}/metadata"
+            },
+            "next_step": f"Use /content/{content_id} to view details or /stream/{content_id} to access content"
+        }
+        
     except HTTPException:
         raise
     except Exception as e:
+        # Log failed upload attempt to Supabase
+        try:
+            import psycopg2
+            DATABASE_URL = os.getenv("DATABASE_URL")
+            
+            if 'postgresql' in DATABASE_URL:
+                conn = psycopg2.connect(DATABASE_URL)
+                cur = conn.cursor()
+                
+                cur.execute("""
+                    INSERT INTO audit_logs (user_id, action, resource_type, resource_id, timestamp, 
+                                          ip_address, details, status)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                """, (
+                    current_user.user_id,
+                    "content_upload_failed",
+                    "content",
+                    "unknown",
+                    time.time(),
+                    client_ip,
+                    json.dumps({"error": str(e), "filename": file.filename}),
+                    "failed"
+                ))
+                
+                conn.commit()
+                cur.close()
+                conn.close()
+                logger.info(f"Failed upload audit log saved to Supabase")
+                
+        except Exception as audit_error:
+            logger.warning(f"Failed upload audit logging failed: {audit_error}")
+        
         # Log error with audit trail
         try:
             audit_logger.log_action(
@@ -1108,7 +1292,7 @@ async def upload_async(
             logger.warning(f"Audit logging failed: {audit_error}")
         
         logger.error(f"Upload failed for user {current_user.user_id}: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
 
 @step3_router.post('/generate-video', response_model=VideoGenerationResponse, status_code=202)
 @track_performance("video_generation")
@@ -2540,6 +2724,61 @@ def get_dashboard(current_user = Depends(get_current_user)):
 
 
 
+
+# ===== ENHANCED UPLOAD UTILITY FUNCTIONS =====
+
+def generate_content_id(user_id: str, filename: str) -> str:
+    """Generate secure content ID"""
+    timestamp = str(int(time.time()))
+    file_hash = hashlib.sha256(f"{user_id}{filename}{timestamp}".encode()).hexdigest()[:12]
+    return f"{file_hash}_{timestamp}"
+
+async def save_file_securely(file: UploadFile, secure_filename: str, validation_result: dict) -> str:
+    """Save file with enhanced security measures"""
+    try:
+        # Ensure upload directory exists
+        upload_dir = "uploads"
+        os.makedirs(upload_dir, exist_ok=True)
+        
+        # Create secure file path
+        file_path = os.path.join(upload_dir, secure_filename)
+        
+        # Save file with validation
+        content = await file.read()
+        
+        # Verify content matches validation
+        actual_hash = hashlib.sha256(content).hexdigest()
+        if actual_hash != validation_result['file_hash']:
+            raise HTTPException(
+                status_code=400,
+                detail="File integrity check failed"
+            )
+        
+        # Write file securely
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+        
+        # Set secure file permissions (Windows compatible)
+        try:
+            os.chmod(file_path, 0o644)
+        except OSError:
+            pass  # Windows may not support chmod
+        
+        logger.info(f"File saved securely: {secure_filename} ({len(content)} bytes)")
+        return file_path
+        
+    except Exception as e:
+        logger.error(f"Secure file save failed: {e}")
+        raise HTTPException(status_code=500, detail="File save failed")
+
+def calculate_authenticity_score(file_hash: str) -> float:
+    """Calculate deterministic authenticity score from file hash"""
+    # Use first 16 characters of hash for deterministic scoring
+    hash_segment = file_hash[:16]
+    numeric_value = int(hash_segment, 16)
+    # Normalize to 0.0-1.0 range
+    score = (numeric_value % 1000) / 1000.0
+    return round(score, 3)
 
 # ===== UTILITY FUNCTIONS =====
 

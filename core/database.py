@@ -22,36 +22,65 @@ import json
 import time
 from datetime import datetime
 
-# Prioritize Supabase PostgreSQL, fallback to SQLite only if Supabase not configured
+# Database Configuration - Supabase Primary, SQLite Fallback
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_ANON_KEY = os.getenv("SUPABASE_ANON_KEY")
+SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD")
 
 # Check for explicit DATABASE_URL first
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-# If no explicit DATABASE_URL, try to build from Supabase credentials
-if not DATABASE_URL or DATABASE_URL == "sqlite:///./ai_agent.db":
-    if SUPABASE_URL and SUPABASE_ANON_KEY and SUPABASE_URL != "https://your-project.supabase.co":
+# Priority 1: Use explicit DATABASE_URL if provided and not default
+if DATABASE_URL and DATABASE_URL != "sqlite:///./ai_agent.db" and "postgresql" in DATABASE_URL:
+    # Test connection first
+    try:
+        import psycopg2
+        test_conn = psycopg2.connect(DATABASE_URL)
+        test_conn.close()
+        print(f"SUCCESS: Using explicit PostgreSQL DATABASE_URL")
+    except Exception as e:
+        print(f"WARNING: PostgreSQL connection failed: {e}")
+        print("INFO: Falling back to SQLite")
+        DATABASE_URL = "sqlite:///./ai_agent.db"
+# Priority 2: Build Supabase connection from credentials
+elif SUPABASE_URL and SUPABASE_ANON_KEY and SUPABASE_DB_PASSWORD:
+    if SUPABASE_URL != "https://your-project.supabase.co":
         # Extract project ID from Supabase URL
         import re
         match = re.search(r'https://([^.]+)\.supabase\.co', SUPABASE_URL)
         if match:
             project_id = match.group(1)
-            SUPABASE_DB_PASSWORD = os.getenv("SUPABASE_DB_PASSWORD")
-            if SUPABASE_DB_PASSWORD:
-                DATABASE_URL = f"postgresql://postgres.{project_id}:{SUPABASE_DB_PASSWORD}@aws-0-us-east-1.pooler.supabase.com:6543/postgres"
-                print(f"SUCCESS: Using Supabase PostgreSQL: {project_id}")
-            else:
-                print("INFO: No SUPABASE_DB_PASSWORD found, using SQLite")
-                DATABASE_URL = "sqlite:///./ai_agent.db"
+            # Try multiple connection formats
+            connection_formats = [
+                f"postgresql://postgres.{project_id}:{SUPABASE_DB_PASSWORD}@aws-0-us-east-1.pooler.supabase.com:6543/postgres",
+                f"postgresql://postgres:{SUPABASE_DB_PASSWORD}@db.{project_id}.supabase.co:5432/postgres",
+                f"postgresql://postgres:{SUPABASE_DB_PASSWORD}@{project_id}.supabase.co:5432/postgres"
+            ]
+            
+            DATABASE_URL = None
+            for url_format in connection_formats:
+                try:
+                    import psycopg2
+                    test_conn = psycopg2.connect(url_format)
+                    test_conn.close()
+                    DATABASE_URL = url_format
+                    print(f"SUCCESS: Connected to Supabase PostgreSQL: {project_id}")
+                    break
+                except:
+                    continue
+            
+            if not DATABASE_URL:
+                DATABASE_URL = connection_formats[0]  # Use first format as fallback
+                print(f"INFO: Using fallback connection for: {project_id}")
         else:
             print(f"ERROR: Invalid Supabase URL format: {SUPABASE_URL}")
             DATABASE_URL = "sqlite:///./ai_agent.db"
     else:
+        print("INFO: Default Supabase URL detected, using SQLite fallback")
         DATABASE_URL = "sqlite:///./ai_agent.db"
-
-# Final fallback
-if not DATABASE_URL:
+# Priority 3: SQLite fallback
+else:
+    print("INFO: No Supabase credentials found, using SQLite fallback")
     DATABASE_URL = "sqlite:///./ai_agent.db"
 
 # Add analytics and logs functions
@@ -108,12 +137,14 @@ class DatabaseManager:
         return False
 # Database status reporting
 if 'postgresql' in DATABASE_URL:
-    print("SUCCESS: Using database: PostgreSQL (Supabase)")
+    print("✅ PRIMARY DATABASE: PostgreSQL (Supabase)")
     print(f"Connection: {DATABASE_URL[:50]}...")
+    print("Features: Full analytics, user management, GDPR compliance")
 else:
-    print("WARNING: Using database: SQLite (fallback)")
-    print("INFO: To use Supabase: Run 'python setup_supabase.py' to configure")
+    print("⚠️  FALLBACK DATABASE: SQLite (Local)")
     print(f"SQLite file: {DATABASE_URL}")
+    print("Limited features: Basic functionality only")
+    print("To enable Supabase: Set SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_DB_PASSWORD in .env")
 
 # Engine configuration
 if DATABASE_URL.startswith("sqlite"):

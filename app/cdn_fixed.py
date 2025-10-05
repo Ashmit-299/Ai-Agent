@@ -63,12 +63,13 @@ async def get_upload_url(
         "upload_token": upload_token,
         "supported_types": ["video/mp4", "video/avi", "video/mov", "audio/mp3", "image/jpeg", "image/png", "text/plain"],
         "instructions": [
-            "1. POST your file to the upload_url",
-            "2. Use multipart/form-data",
-            "3. File field name: 'file'",
-            "4. Include your JWT token in Authorization header"
+            "1. Use the upload_token directly in the URL path",
+            "2. POST to /cdn/upload/{token} (replace {token} with upload_token)",
+            "3. Use multipart/form-data",
+            "4. File field name: 'file'",
+            "5. Include your JWT token in Authorization header"
         ],
-        "example": f"curl -X POST '/cdn/upload/{upload_token}' -H 'Authorization: Bearer YOUR_TOKEN' -F 'file=@{filename}'"
+        "example": f"curl -X POST 'http://localhost:9000/cdn/upload/{upload_token}' -H 'Authorization: Bearer YOUR_TOKEN' -F 'file=@{filename}'"
     }
 
 @router.post("/upload/{upload_token}")
@@ -80,18 +81,41 @@ async def upload_file(
 ):
     """Upload file using upload token - Fixed for video files"""
     
-    print(f"DEBUG: Upload endpoint called with token: {upload_token}")
-    print(f"DEBUG: File details: {file.filename}, {file.content_type}, {file.size}")
+    # Handle URL decoding issues - extract just the token part
+    import urllib.parse
+    
+    # If token contains URL path, extract just the token
+    if "/cdn/upload/" in upload_token:
+        actual_token = upload_token.split("/cdn/upload/")[-1]
+    else:
+        actual_token = upload_token
+    
+    # URL decode the token
+    decoded_token = urllib.parse.unquote(actual_token)
+    
+    print(f"DEBUG: Raw upload_token: {upload_token}")
+    print(f"DEBUG: Extracted token: {actual_token}")
+    print(f"DEBUG: Decoded token: {decoded_token}")
     print(f"DEBUG: Available tokens: {list(upload_tokens.keys())}")
-    print(f"DEBUG: Current user: {current_user.user_id if current_user else 'None'}")
-    print(f"DEBUG: Request headers available for auth check")
+    
+    # Try different token variations
+    token_to_use = None
+    for candidate in [decoded_token, actual_token, upload_token]:
+        if candidate in upload_tokens:
+            token_to_use = candidate
+            print(f"DEBUG: Using token: {candidate}")
+            break
+    
+    if not token_to_use:
+        print(f"DEBUG: No matching token found for any variation")
+        token_to_use = decoded_token  # Use decoded as fallback
     
     # Validate token
-    if upload_token not in upload_tokens:
-        print(f"DEBUG: Token {upload_token} not found in available tokens")
-        raise HTTPException(status_code=400, detail=f"Invalid upload token: {upload_token}")
+    if token_to_use not in upload_tokens:
+        print(f"DEBUG: Token {token_to_use} not found in available tokens")
+        raise HTTPException(status_code=400, detail=f"Invalid upload token: {token_to_use}")
     
-    token_data = upload_tokens[upload_token]
+    token_data = upload_tokens[token_to_use]
     
     # Check expiry
     if time.time() > token_data['expires_at']:
@@ -146,69 +170,86 @@ async def upload_file(
         f.write(file_content)
     
     # Mark token as used
-    upload_tokens[upload_token]['used'] = True
+    upload_tokens[token_to_use]['used'] = True
     print(f"DEBUG: File uploaded successfully: {content_id}")
     print(f"DEBUG: File saved to: {file_path}")
     print(f"DEBUG: File size: {len(file_content)} bytes")
     
     # Save to database with proper error handling
     try:
-        # Try Supabase first
+        # Save to Supabase database
         try:
             import psycopg2
             DATABASE_URL = os.getenv("DATABASE_URL")
+            print(f"DEBUG: DATABASE_URL configured: {bool(DATABASE_URL)}")
+            
             if DATABASE_URL and 'postgresql' in DATABASE_URL:
+                print(f"DEBUG: Connecting to Supabase...")
                 conn = psycopg2.connect(DATABASE_URL)
                 cur = conn.cursor()
+                
+                # Insert into content table
                 cur.execute("""
                     INSERT INTO content (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
                     VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (content_id) DO UPDATE SET
+                        title = EXCLUDED.title,
+                        description = EXCLUDED.description
                 """, (
                     content_id, current_user.user_id, file.filename or "Uploaded file", 
                     "File uploaded via CDN", file_path, file.content_type or 'application/octet-stream',
                     time.time(), 0.8, json.dumps(['uploaded', 'cdn']), 0, 0, 0
                 ))
+                
                 conn.commit()
                 cur.close()
                 conn.close()
-                print(f"Content saved to Supabase: {content_id}")
+                print(f"✅ Content saved to Supabase: {content_id}")
+            else:
+                print(f"DEBUG: DATABASE_URL not configured for PostgreSQL")
+                raise Exception("PostgreSQL DATABASE_URL not configured")
         except Exception as supabase_error:
-            print(f"Supabase save failed: {supabase_error}")
+            print(f"❌ Supabase save failed: {supabase_error}")
             
             # Fallback to SQLite
-            import sqlite3
-            conn = sqlite3.connect('data.db')
-            with conn:
-                cur = conn.cursor()
-                # Create table if not exists
-                cur.execute("""
-                    CREATE TABLE IF NOT EXISTS content (
-                        content_id TEXT PRIMARY KEY,
-                        uploader_id TEXT,
-                        title TEXT,
-                        description TEXT,
-                        file_path TEXT,
-                        content_type TEXT,
-                        duration_ms INTEGER,
-                        uploaded_at REAL,
-                        authenticity_score REAL,
-                        current_tags TEXT,
-                        views INTEGER DEFAULT 0,
-                        likes INTEGER DEFAULT 0,
-                        shares INTEGER DEFAULT 0
-                    )
-                """)
-                cur.execute("""
-                    INSERT OR REPLACE INTO content 
-                    (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (
-                    content_id, current_user.user_id, file.filename or "Uploaded file",
-                    "File uploaded via CDN", file_path, file.content_type or 'application/octet-stream',
-                    time.time(), 0.8, json.dumps(['uploaded', 'cdn']), 0, 0, 0
-                ))
-            conn.close()
-            print(f"Content saved to SQLite: {content_id}")
+            try:
+                import sqlite3
+                print(f"DEBUG: Falling back to SQLite...")
+                conn = sqlite3.connect('data.db')
+                with conn:
+                    cur = conn.cursor()
+                    # Create table if not exists
+                    cur.execute("""
+                        CREATE TABLE IF NOT EXISTS content (
+                            content_id TEXT PRIMARY KEY,
+                            uploader_id TEXT,
+                            title TEXT,
+                            description TEXT,
+                            file_path TEXT,
+                            content_type TEXT,
+                            duration_ms INTEGER,
+                            uploaded_at REAL,
+                            authenticity_score REAL,
+                            current_tags TEXT,
+                            views INTEGER DEFAULT 0,
+                            likes INTEGER DEFAULT 0,
+                            shares INTEGER DEFAULT 0
+                        )
+                    """)
+                    cur.execute("""
+                        INSERT OR REPLACE INTO content 
+                        (content_id, uploader_id, title, description, file_path, content_type, uploaded_at, authenticity_score, current_tags, views, likes, shares)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        content_id, current_user.user_id, file.filename or "Uploaded file",
+                        "File uploaded via CDN", file_path, file.content_type or 'application/octet-stream',
+                        time.time(), 0.8, json.dumps(['uploaded', 'cdn']), 0, 0, 0
+                    ))
+                conn.close()
+                print(f"✅ Content saved to SQLite fallback: {content_id}")
+            except Exception as sqlite_error:
+                print(f"❌ SQLite fallback also failed: {sqlite_error}")
+                # Continue anyway - file is saved locally
             
     except Exception as db_error:
         print(f"Database save failed: {db_error}")

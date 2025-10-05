@@ -146,7 +146,6 @@ except Exception as e:
 from .routes import router, step1_router, step3_router, step4_router, step5_router, step6_router, step7_router, step8_router, step9_router
 from .cdn_fixed import router as cdn_router
 from .simple_feedback_route import router as simple_feedback_router
-from .minimal_feedback import router as minimal_feedback_router
 
 # Import presigned URLs router with fallback
 try:
@@ -567,7 +566,18 @@ async def debug_routes():
             "timestamp": time.strftime('%Y-%m-%d %H:%M:%S')
         }
 
-# Add global authentication middleware (FIRST - before other middleware)
+# Add input validation middleware FIRST for security
+try:
+    from .input_validation import InputValidationMiddleware
+    app.add_middleware(
+        InputValidationMiddleware,
+        max_body_size=100 * 1024 * 1024  # 100MB request body limit
+    )
+    logger.info("Enhanced input validation middleware enabled")
+except ImportError as e:
+    logger.warning(f"Input validation middleware not available: {e}")
+
+# Add global authentication middleware (SECOND - after validation)
 app.add_middleware(GlobalAuthMiddleware)
 
 # Add new middleware for endpoint hardening
@@ -686,7 +696,6 @@ app.include_router(step3_router)   # STEP 3: Content Upload & Video Generation
 app.include_router(step4_router)   # STEP 4: Content Access & Streaming
 app.include_router(step5_router)   # STEP 5: AI Feedback & Tag Recommendations
 app.include_router(simple_feedback_router)  # Simple feedback endpoint that works
-app.include_router(minimal_feedback_router)  # Minimal feedback endpoint
 app.include_router(step6_router)   # STEP 6: Analytics & Performance Monitoring
 app.include_router(step7_router)   # STEP 7: Task Queue Management
 app.include_router(step8_router)   # STEP 8: System Maintenance & Operations

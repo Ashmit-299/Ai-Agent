@@ -69,6 +69,11 @@
       "nop": 0.0,
       "boost_tag": 0.0,
       "add_suggested_tag": 0.0
+    },
+    "auth_4_t2": {
+      "nop": 0.0,
+      "boost_tag": 0.0,
+      "add_suggested_tag": 0.0
     }
   },
   "epsilon": 0.2
