@@ -19,166 +19,104 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Upgrade schema with proper transaction handling."""
+    """Upgrade schema with safe operations."""
+    # Use raw SQL with proper error handling to avoid transaction issues
     connection = op.get_bind()
     
-    # Check if columns exist before adding them
-    inspector = sa.inspect(connection)
-    user_columns = [col['name'] for col in inspector.get_columns('user')]
+    # Check what exists using direct SQL queries
+    def column_exists(table, column):
+        result = connection.execute(sa.text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = :table AND column_name = :column)"
+        ), {"table": table, "column": column})
+        return result.scalar()
+    
+    def index_exists(index_name):
+        result = connection.execute(sa.text(
+            "SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = :index_name)"
+        ), {"index_name": index_name})
+        return result.scalar()
+    
+    def table_exists(table_name):
+        result = connection.execute(sa.text(
+            "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :table_name)"
+        ), {"table_name": table_name})
+        return result.scalar()
     
     # Add user_id column if it doesn't exist
-    if 'user_id' not in user_columns:
-        try:
-            op.add_column('user', sa.Column('user_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False))
-        except Exception as e:
-            print(f"Failed to add user_id column: {e}")
+    if not column_exists('user', 'user_id'):
+        connection.execute(sa.text('ALTER TABLE "user" ADD COLUMN user_id VARCHAR NOT NULL DEFAULT \'demo001\''))
     
     # Add password_hash column if it doesn't exist
-    if 'password_hash' not in user_columns:
-        try:
-            op.add_column('user', sa.Column('password_hash', sqlmodel.sql.sqltypes.AutoString(), nullable=False))
-        except Exception as e:
-            print(f"Failed to add password_hash column: {e}")
+    if not column_exists('user', 'password_hash'):
+        connection.execute(sa.text('ALTER TABLE "user" ADD COLUMN password_hash VARCHAR NOT NULL DEFAULT \'$2b$12$dummy\''))
     
-    # Update username column
-    try:
-        op.alter_column('user', 'username', existing_type=sa.VARCHAR(), nullable=False)
-    except Exception as e:
-        print(f"Failed to alter username column: {e}")
+    # Drop old index if it exists
+    if index_exists('ix_user_sub'):
+        connection.execute(sa.text('DROP INDEX ix_user_sub'))
     
-    # Handle indexes safely
-    try:
-        op.drop_index('ix_user_sub', table_name='user')
-    except Exception as e:
-        print(f"Failed to drop ix_user_sub index: {e}")
+    # Create new index if it doesn't exist
+    if not index_exists('ix_user_username'):
+        connection.execute(sa.text('CREATE UNIQUE INDEX ix_user_username ON "user" (username)'))
     
+    # Add unique constraint if it doesn't exist
     try:
-        op.create_index(op.f('ix_user_username'), 'user', ['username'], unique=True)
-    except Exception as e:
-        print(f"Failed to create ix_user_username index: {e}")
-    
-    try:
-        op.create_unique_constraint('uq_user_user_id', 'user', ['user_id'])
-    except Exception as e:
-        print(f"Failed to create user_id constraint: {e}")
+        connection.execute(sa.text('ALTER TABLE "user" ADD CONSTRAINT uq_user_user_id UNIQUE (user_id)'))
+    except Exception:
+        pass  # Constraint already exists
     
     # Create content table if it doesn't exist
-    existing_tables = inspector.get_table_names()
-    if 'content' not in existing_tables:
-        try:
-            op.create_table('content',
-                sa.Column('content_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-                sa.Column('uploader_id', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-                sa.Column('title', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-                sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-                sa.Column('file_path', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-                sa.Column('content_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-                sa.Column('duration_ms', sa.Integer(), nullable=False),
-                sa.Column('uploaded_at', sa.Float(), nullable=False),
-                sa.Column('authenticity_score', sa.Float(), nullable=False),
-                sa.Column('current_tags', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-                sa.Column('views', sa.Integer(), nullable=False),
-                sa.Column('likes', sa.Integer(), nullable=False),
-                sa.Column('shares', sa.Integer(), nullable=False),
-                sa.ForeignKeyConstraint(['uploader_id'], ['user.user_id'], ),
-                sa.PrimaryKeyConstraint('content_id')
+    if not table_exists('content'):
+        connection.execute(sa.text('''
+            CREATE TABLE content (
+                content_id VARCHAR NOT NULL PRIMARY KEY,
+                uploader_id VARCHAR NOT NULL,
+                title VARCHAR NOT NULL,
+                description VARCHAR,
+                file_path VARCHAR NOT NULL,
+                content_type VARCHAR NOT NULL,
+                duration_ms INTEGER NOT NULL DEFAULT 0,
+                uploaded_at FLOAT NOT NULL,
+                authenticity_score FLOAT NOT NULL DEFAULT 0.8,
+                current_tags VARCHAR DEFAULT '[]',
+                views INTEGER NOT NULL DEFAULT 0,
+                likes INTEGER NOT NULL DEFAULT 0,
+                shares INTEGER NOT NULL DEFAULT 0,
+                FOREIGN KEY (uploader_id) REFERENCES "user" (user_id)
             )
-        except Exception as e:
-            print(f"Failed to create content table: {e}")
+        '''))
     
     # Modify feedback table if it exists
-    if 'feedback' in existing_tables:
-        feedback_columns = [col['name'] for col in inspector.get_columns('feedback')]
-        
+    if table_exists('feedback'):
         # Add new columns if they don't exist
-        if 'event_type' not in feedback_columns:
-            try:
-                op.add_column('feedback', sa.Column('event_type', sqlmodel.sql.sqltypes.AutoString(), nullable=False))
-            except Exception as e:
-                print(f"Failed to add event_type column: {e}")
+        if not column_exists('feedback', 'event_type'):
+            connection.execute(sa.text('ALTER TABLE feedback ADD COLUMN event_type VARCHAR NOT NULL DEFAULT \'view\''))
         
-        if 'watch_time_ms' not in feedback_columns:
-            try:
-                op.add_column('feedback', sa.Column('watch_time_ms', sa.Integer(), nullable=False))
-            except Exception as e:
-                print(f"Failed to add watch_time_ms column: {e}")
+        if not column_exists('feedback', 'watch_time_ms'):
+            connection.execute(sa.text('ALTER TABLE feedback ADD COLUMN watch_time_ms INTEGER NOT NULL DEFAULT 0'))
         
-        if 'reward' not in feedback_columns:
-            try:
-                op.add_column('feedback', sa.Column('reward', sa.Float(), nullable=False))
-            except Exception as e:
-                print(f"Failed to add reward column: {e}")
+        if not column_exists('feedback', 'reward'):
+            connection.execute(sa.text('ALTER TABLE feedback ADD COLUMN reward FLOAT NOT NULL DEFAULT 0.0'))
         
-        if 'timestamp' not in feedback_columns:
-            try:
-                op.add_column('feedback', sa.Column('timestamp', sa.Float(), nullable=False))
-            except Exception as e:
-                print(f"Failed to add timestamp column: {e}")
+        if not column_exists('feedback', 'timestamp'):
+            connection.execute(sa.text('ALTER TABLE feedback ADD COLUMN timestamp FLOAT NOT NULL DEFAULT 0'))
         
-        # Handle constraints and indexes
-        try:
-            op.drop_index('ix_feedback_content_id', table_name='feedback')
-        except Exception as e:
-            print(f"Failed to drop feedback index: {e}")
-        
-        try:
-            op.drop_constraint('feedback_user_id_fkey', 'feedback', type_='foreignkey')
-        except Exception as e:
-            print(f"Failed to drop feedback constraint: {e}")
-        
-        try:
-            op.create_foreign_key(None, 'feedback', 'user', ['user_id'], ['user_id'])
-        except Exception as e:
-            print(f"Failed to create user foreign key: {e}")
-        
-        try:
-            op.create_foreign_key(None, 'feedback', 'content', ['content_id'], ['content_id'])
-        except Exception as e:
-            print(f"Failed to create content foreign key: {e}")
-        
-        if 'created_at' in feedback_columns:
-            try:
-                op.drop_column('feedback', 'created_at')
-            except Exception as e:
-                print(f"Failed to drop created_at column: {e}")
+        # Drop old columns if they exist
+        if column_exists('feedback', 'created_at'):
+            connection.execute(sa.text('ALTER TABLE feedback DROP COLUMN created_at'))
     
     # Clean up old tables if they exist
-    if 'videometadata' in existing_tables:
-        try:
-            op.drop_index('ix_videometadata_content_id', table_name='videometadata')
-        except Exception as e:
-            print(f"Failed to drop videometadata index: {e}")
-        
-        try:
-            op.drop_table('videometadata')
-        except Exception as e:
-            print(f"Failed to drop videometadata table: {e}")
+    if table_exists('videometadata'):
+        connection.execute(sa.text('DROP TABLE IF EXISTS videometadata CASCADE'))
     
-    if 'script' in existing_tables:
-        try:
-            op.drop_index('ix_script_content_id', table_name='script')
-        except Exception as e:
-            print(f"Failed to drop script index: {e}")
-        
-        try:
-            op.drop_table('script')
-        except Exception as e:
-            print(f"Failed to drop script table: {e}")
+    if table_exists('script'):
+        connection.execute(sa.text('DROP TABLE IF EXISTS script CASCADE'))
     
     # Clean up old user columns if they exist
-    user_columns = [col['name'] for col in inspector.get_columns('user')]
+    if column_exists('user', 'sub'):
+        connection.execute(sa.text('ALTER TABLE "user" DROP COLUMN IF EXISTS sub'))
     
-    if 'sub' in user_columns:
-        try:
-            op.drop_column('user', 'sub')
-        except Exception as e:
-            print(f"Failed to drop sub column: {e}")
-    
-    if 'id' in user_columns:
-        try:
-            op.drop_column('user', 'id')
-        except Exception as e:
-            print(f"Failed to drop id column: {e}")
+    if column_exists('user', 'id'):
+        connection.execute(sa.text('ALTER TABLE "user" DROP COLUMN IF EXISTS id'))
 
 
 def downgrade() -> None:
